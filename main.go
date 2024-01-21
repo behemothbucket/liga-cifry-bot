@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -42,7 +44,6 @@ var (
 	searchCriterias = map[string]string{}
 	currentCriteria = ""
 
-	// Button texts
 	searchUserButton       = "Поиск карточки пользователя"
 	searchUniversityButton = "Поиск карточки университета"
 	backButton             = "⬅️ Назад"
@@ -56,46 +57,50 @@ var (
 	bot *tgbotapi.BotAPI
 )
 
+func init() {
+	if err := godotenv.Load(); err != nil {
+		log.Print("Файл .env не найден")
+	}
+}
+
 func main() {
+	telegramBotToken, exists := os.LookupEnv("TOKEN")
+
+	if !exists {
+		log.Print("Токен не обнаружен")
+	}
+
 	var err error
-	bot, err = tgbotapi.NewBotAPI("6587208797:AAEOA1DGftSvb8S8EXqKrrWRvf_BVtWQP8o")
+
+	bot, err = tgbotapi.NewBotAPI(telegramBotToken)
 	if err != nil {
 		// Abort if something is wrong
 		log.Panic(err)
 	}
 
-	// Set this to true to log all interactions with telegram servers
 	bot.Debug = false
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	// Create a new cancellable background context. Calling `cancel()` leads to the cancellation of the context
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
-	// `updates` is a golang channel which receives telegram updates
 	updates := bot.GetUpdatesChan(u)
 
-	// Pass cancellable context to goroutine
 	go receiveUpdates(ctx, updates)
 
-	// Tell the user the bot is online
 	log.Println("Сервер запущен. Нажмите Enter для остановки...")
 
-	// Wait for a newline symbol, then cancel handling updates
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 	cancel()
 }
 
 func receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel) {
-	// `for {` means the loop is infinite until we manually stop it
 	for {
 		select {
-		// stop looping if ctx is cancelled
 		case <-ctx.Done():
 			return
-		// receive update from channel and then handle it
 		case update := <-updates:
 			handleUpdate(update)
 		}
@@ -104,17 +109,13 @@ func receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel) {
 
 func handleUpdate(update tgbotapi.Update) {
 	switch {
-	// Handle messages
 	case update.Message != nil:
 		handleMessage(update.Message)
 		break
-
-	// Handle button clicks
 	case update.CallbackQuery != nil:
 		handleButton(update.CallbackQuery)
 		break
 	}
-
 }
 
 func handleMessage(message *tgbotapi.Message) {
@@ -136,22 +137,28 @@ func handleMessage(message *tgbotapi.Message) {
 	log.Printf("https://t.me/%s [%d] (%s%s) написал(а) '%s'", userName, userID, firstName, lastName, text)
 
 	var err error
-	if strings.HasPrefix(text, "/") {
-		err = handleCommand(message.Chat.ID, text)
-	} else if searchMode {
-		if len(searchCriterias) == 0 {
-			msg := tgbotapi.NewMessage(message.Chat.ID, "<b>Вы заполнили все критерии</b>✅")
+
+	if reflect.TypeOf(message.Text).Kind() == reflect.String && message.Text != "" {
+		if strings.HasPrefix(text, "/") {
+			err = handleCommand(message.Chat.ID, text)
+		} else if searchMode {
+			if len(searchCriterias) == 0 {
+				msg := tgbotapi.NewMessage(message.Chat.ID, "<b>Вы заполнили все критерии</b>✅")
+				msg.ParseMode = tgbotapi.ModeHTML
+				_, err = bot.Send(msg)
+				err = SendMenu(message.Chat.ID)
+				searchMode = false
+			}
+			msg := tgbotapi.NewMessage(message.Chat.ID, "<b>Ответ принят</b>\nЯ пока что в разработке...")
 			msg.ParseMode = tgbotapi.ModeHTML
 			_, err = bot.Send(msg)
+			delete(searchCriterias, currentCriteria)
+		} else {
 			err = SendMenu(message.Chat.ID)
-			searchMode = false
 		}
-		msg := tgbotapi.NewMessage(message.Chat.ID, "<b>Ответ принят</b>\nЯ пока что в разработке...")
-		msg.ParseMode = tgbotapi.ModeHTML
-		_, err = bot.Send(msg)
-		delete(searchCriterias, currentCriteria)
-		log.Print(searchCriterias)
 	} else {
+		msg := tgbotapi.NewMessage(message.Chat.ID, "Файлы, фото/видео и другие медиа не принимаются ❌")
+		_, err = bot.Send(msg)
 		err = SendMenu(message.Chat.ID)
 	}
 
@@ -160,7 +167,6 @@ func handleMessage(message *tgbotapi.Message) {
 	}
 }
 
-// When we get a command, we react accordingly
 func handleCommand(chatId int64, command string) error {
 	var err error
 
@@ -194,7 +200,6 @@ func handleButton(query *tgbotapi.CallbackQuery) {
 		for k := range searchCriterias {
 			delete(searchCriterias, k)
 		}
-		//log.Print(searchCriterias)
 	} else if query.Data == applyButton {
 		text = getCriteria()
 		markup = tgbotapi.NewInlineKeyboardMarkup(
@@ -249,11 +254,9 @@ func toggleButtonCheck(button string) {
 				key := strings.TrimPrefix(button, prefix)
 				searchButtons[currentSearchScreen][i] = key
 				delete(searchCriterias, key)
-				//log.Print(searchCriterias)
 			} else {
 				searchButtons[currentSearchScreen][i] = prefix + button
 				searchCriterias[button] = button
-				//log.Print(searchCriterias)
 			}
 		}
 	}
@@ -276,17 +279,6 @@ func getCriteria() string {
 	return val
 }
 
-//func collectSearchData() {
-//	for true {
-//		if len(searchCriterias) == 0 {
-//			break
-//		}
-//
-//		SendMenu()
-//
-//	}
-//}
-
 func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -301,69 +293,31 @@ func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
+func getSearchMenuMarkup(searchType string) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	for _, btn := range searchButtons[searchType] {
+		row := tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(btn, btn),
+		)
+		rows = append(rows, row)
+	}
+
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(applyButton, applyButton),
+	})
+
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(backButton, backButton),
+	})
+
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
 func getUserSearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][0], searchButtons["user"][0]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][1], searchButtons["user"][1]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][2], searchButtons["user"][2]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][3], searchButtons["user"][3]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][4], searchButtons["user"][4]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][5], searchButtons["user"][5]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["user"][6], searchButtons["user"][6]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(applyButton, applyButton),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(backButton, backButton),
-		),
-	)
+	return getSearchMenuMarkup("user")
 }
 
 func getUniversitySearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][0], searchButtons["university"][0]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][1], searchButtons["university"][1]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][2], searchButtons["university"][2]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][3], searchButtons["university"][3]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][4], searchButtons["university"][4]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][5], searchButtons["university"][5]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][6], searchButtons["university"][6]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchButtons["university"][7], searchButtons["university"][7]),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(applyButton, applyButton),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(backButton, backButton),
-		),
-	)
+	return getSearchMenuMarkup("university")
 }
