@@ -28,7 +28,6 @@ func main() {
 
 	bot, err = tgbotapi.NewBotAPI(telegramBotToken)
 	if err != nil {
-		// Abort if something is wrong
 		log.Panic(err)
 	}
 
@@ -64,7 +63,7 @@ func receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel) {
 func handleUpdate(update tgbotapi.Update) {
 	switch {
 	case update.Message != nil:
-		handleMessage(update.Message)
+		handleMessage(update)
 		break
 	case update.CallbackQuery != nil:
 		handleButton(update.CallbackQuery)

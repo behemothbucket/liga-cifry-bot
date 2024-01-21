@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"log"
 	"strings"
 )
 
@@ -29,8 +30,8 @@ var (
 		},
 	}
 
-	searchUserButton       = "Поиск карточки пользователя"
-	searchUniversityButton = "Поиск карточки университета"
+	searchUserButton       = "🔍 Поиск карточки пользователя"
+	searchUniversityButton = "🔍 Поиск карточки университета"
 	backButton             = "⬅️ Назад"
 	cancelButton           = "❌ Отмена"
 	applyButton            = "📝 Применить"
@@ -48,7 +49,7 @@ func handleButton(query *tgbotapi.CallbackQuery) {
 		text = searchMenuDescription
 		markup = getUserSearchMenuMarkup()
 		currentSearchScreen = "user"
-
+		log.Println(searchCriterias)
 	} else if query.Data == searchUniversityButton {
 		text = searchMenuDescription
 		markup = getUniversitySearchMenuMarkup()
@@ -66,13 +67,14 @@ func handleButton(query *tgbotapi.CallbackQuery) {
 		)
 		searchMode = true
 	} else if query.Data == cancelButton {
-		SendMenu(message.Chat.ID)
 		for k := range searchCriterias {
 			delete(searchCriterias, k)
 		}
+		log.Print(searchCriterias)
 		searchMode = false
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
 		bot.Send(callbackCfg)
+		sendMenuMessage(message.Chat.ID)
 		return
 	} else if criteriaButtonIsClicked(query.Data) {
 		toggleButtonCheck(query.Data)

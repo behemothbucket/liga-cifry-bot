@@ -3,16 +3,16 @@ package main
 import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 const (
-	mainMenuDescription   = "<b>Меню</b>\n\nТекст Текст Текст Текст"
+	mainMenuDescription   = "<b>Меню</b>\n\nТекст Текст Текст\n\nТекст Текст Текст\n\nТекст Текст Текст"
 	searchMenuDescription = "<b>Выберите критерии поиска:</b>"
 )
 
+var (
+	enabledInlineKeyboard = false
+)
+
 func SendMenu(chatId int64) error {
-	msg := tgbotapi.NewMessage(chatId, mainMenuDescription)
-	msg.ParseMode = tgbotapi.ModeHTML
-	msg.ReplyMarkup = getMainMenuMarkup()
-	_, err := bot.Send(msg)
-	return err
+	return sendFormattedMessage(chatId, mainMenuDescription)
 }
 
 func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
