@@ -1,8 +1,9 @@
 package main
 
 var (
-	searchMode          = false
-	searchCriterias     = map[string]string{}
-	currentCriteria     = ""
-	currentSearchScreen = ""
+	searchMode            = false
+	showSearchResultsMode = false
+	searchCriterias       = map[string]string{}
+	currentCriteria       = ""
+	currentSearchScreen   = ""
 )

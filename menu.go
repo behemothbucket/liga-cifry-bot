@@ -9,10 +9,12 @@ const (
 
 var (
 	enabledInlineKeyboard = false
+	mainMenuMarkup        = tgbotapi.NewInlineKeyboardMarkup()
+	cancelMenuMarkup      = tgbotapi.NewInlineKeyboardMarkup()
 )
 
-func SendMenu(chatId int64) error {
-	return sendFormattedMessage(chatId, mainMenuDescription)
+func (b *Bot) sendMainMenu(chatId int64) error {
+	return b.sendMarkupMessage(chatId, mainMenuDescription)
 }
 
 func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
@@ -22,6 +24,9 @@ func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(searchUniversityButton, searchUniversityButton),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(searchAllButton, searchAllButton),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonURL(miroButton, "https://miro.com/app/board/uXjVN5NbjoM=/"),
@@ -40,11 +45,8 @@ func getSearchMenuMarkup(searchType string) tgbotapi.InlineKeyboardMarkup {
 	}
 
 	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData(applyButton, applyButton),
-	})
-
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData(backButton, backButton),
+		tgbotapi.NewInlineKeyboardButtonData(applyButton, applyButton),
 	})
 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -52,6 +54,12 @@ func getSearchMenuMarkup(searchType string) tgbotapi.InlineKeyboardMarkup {
 
 func getUserSearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return getSearchMenuMarkup("user")
+}
+
+func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(cancelButton, cancelButton)),
+	)
 }
 
 func getUniversitySearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {

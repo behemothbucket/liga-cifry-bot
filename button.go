@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"log"
 	"strings"
 )
 
@@ -32,74 +30,42 @@ var (
 
 	searchUserButton       = "🔍 Поиск карточки пользователя"
 	searchUniversityButton = "🔍 Поиск карточки университета"
+	searchAllButton        = "🔍 Поиск по всем карточкам"
 	backButton             = "⬅️ Назад"
-	cancelButton           = "❌ Отмена"
+	cancelButton           = "❌ Отменить поиск"
 	applyButton            = "📝 Применить"
 	searchButton           = "🔍 Искать"
 	miroButton             = "Miro"
+
+	toggleButtonPrefix = "✅ "
 )
-
-func handleButton(query *tgbotapi.CallbackQuery) {
-	var text string
-
-	markup := getMainMenuMarkup()
-	message := query.Message
-
-	if query.Data == searchUserButton {
-		text = searchMenuDescription
-		markup = getUserSearchMenuMarkup()
-		currentSearchScreen = "user"
-		log.Println(searchCriterias)
-	} else if query.Data == searchUniversityButton {
-		text = searchMenuDescription
-		markup = getUniversitySearchMenuMarkup()
-		currentSearchScreen = "university"
-	} else if query.Data == backButton {
-		text = mainMenuDescription
-		markup = getMainMenuMarkup()
-		for k := range searchCriterias {
-			delete(searchCriterias, k)
-		}
-	} else if query.Data == applyButton {
-		text = getCriteria()
-		markup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(cancelButton, cancelButton)),
-		)
-		searchMode = true
-	} else if query.Data == cancelButton {
-		for k := range searchCriterias {
-			delete(searchCriterias, k)
-		}
-		log.Print(searchCriterias)
-		searchMode = false
-		callbackCfg := tgbotapi.NewCallback(query.ID, "")
-		bot.Send(callbackCfg)
-		sendMenuMessage(message.Chat.ID)
-		return
-	} else if criteriaButtonIsClicked(query.Data) {
-		toggleButtonCheck(query.Data)
-		text = searchMenuDescription
-		if currentSearchScreen == "user" {
-			markup = getUserSearchMenuMarkup()
-		} else {
-			markup = getUniversitySearchMenuMarkup()
-		}
-	}
-
-	callbackCfg := tgbotapi.NewCallback(query.ID, "")
-	bot.Send(callbackCfg)
-
-	msg := tgbotapi.NewEditMessageTextAndMarkup(message.Chat.ID, message.MessageID, text, markup)
-	msg.ParseMode = tgbotapi.ModeHTML
-	bot.Send(msg)
-}
 
 func hasPrefix(button string, prefix string) bool {
 	return strings.Contains(button, prefix)
 }
 
-func removeKey(criteria string) {
+func removeSearchCriteria(criteria string) {
 	delete(searchCriterias, criteria)
+}
+
+func addSearchCriteria(criteria string) {
+	searchCriterias[criteria] = criteria
+}
+
+func removeAllSearchCriterias() {
+	for k := range searchCriterias {
+		delete(searchCriterias, k)
+	}
+}
+
+func removeCriteriaByPrefix(screen []string, prefix string) {
+	for i, _ := range screen {
+		if hasPrefix(screen[i], prefix) {
+			key := strings.TrimPrefix(screen[i], prefix)
+			screen[i] = key
+			removeSearchCriteria(key)
+		}
+	}
 }
 
 func findButtonIndex(buttons []string, targetButton string) int {
@@ -111,19 +77,21 @@ func findButtonIndex(buttons []string, targetButton string) int {
 	return -1
 }
 
-func toggleButtonCheck(button string) {
-	prefix := "✅ "
-
+func toggleCriteriaButton(button string) {
 	index := findButtonIndex(searchButtons[currentSearchScreen], button)
 
-	if hasPrefix(searchButtons[currentSearchScreen][index], prefix) {
-		key := strings.TrimPrefix(searchButtons[currentSearchScreen][index], prefix)
-		searchButtons[currentSearchScreen][index] = key
-		removeKey(key)
+	if hasPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix) {
+		removedPrefix := strings.TrimPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix)
+		searchButtons[currentSearchScreen][index] = removedPrefix
+		removeSearchCriteria(removedPrefix)
 	} else {
-		searchButtons[currentSearchScreen][index] = prefix + button
-		searchCriterias[button] = button
+		searchButtons[currentSearchScreen][index] = toggleButtonPrefix + button
+		addSearchCriteria(button)
 	}
+}
+
+func resetCriteriaButtons() {
+	removeCriteriaByPrefix(searchButtons[currentSearchScreen], toggleButtonPrefix)
 }
 
 func criteriaButtonIsClicked(button string) bool {
