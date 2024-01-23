@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/zhashkevych/go-pocket-sdk"
 	"log"
 	"os"
 )
 
 type Bot struct {
-	bot          *tgbotapi.BotAPI
-	pocketClient *pocket.Client
+	bot *tgbotapi.BotAPI
 }
 
 func NewBot() *Bot {
@@ -91,6 +89,8 @@ func (b *Bot) handleMessage(update tgbotapi.Update) {
 			enabledKeyboard = false
 			mainMenuMarkup = getMainMenuMarkup()
 			err = b.sendMainMenu(update.Message.Chat.ID)
+		} else if text == "Иди нахуй" {
+			err = b.sendMessage(update.Message.Chat.ID, "Уже иду.")
 		} else {
 			err = b.sendAuthorizationMessage(update.Message.Chat.ID)
 		}

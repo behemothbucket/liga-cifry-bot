@@ -3,8 +3,8 @@ package main
 import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 const (
-	mainMenuDescription   = "<b>Меню</b>\n\nТекст Текст Текст\n\nТекст Текст Текст\n\nТекст Текст Текст"
-	searchMenuDescription = "<b>Выберите критерии поиска:</b>"
+	mainMenuDescription   = "Выберите вариант поиска"
+	searchMenuDescription = "<b>Выберите критерии поиска</b>"
 )
 
 var (
@@ -24,12 +24,6 @@ func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(searchUniversityButton, searchUniversityButton),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchAllButton, searchAllButton),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL(miroButton, "https://miro.com/app/board/uXjVN5NbjoM=/"),
 		),
 	)
 }
