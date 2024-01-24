@@ -41,10 +41,6 @@ func (b *Bot) sendSearchFinalMessage(chatID int64) error {
 	return err
 }
 
-func (b *Bot) sendAuthorizationMessage(chatID int64) error {
-	return b.sendMarkupMessage(chatID, "❗️Пожалуйста, войдите в группу по ссылке-приглашению")
-}
-
 func (b *Bot) sendMediaErrorMessage(chatID int64) error {
 	return b.sendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>")
 }
@@ -58,12 +54,13 @@ func (b *Bot) sendMarkupMessage(chatID int64, text string) error {
 		msg.ReplyMarkup = cancelMenuMarkup
 	}
 
-	if enabledInlineKeyboard && !searchMode && !showSearchResultsMode {
+	if !searchMode && !showSearchResultsMode {
 		msg.ReplyMarkup = mainMenuMarkup
 	}
 
-	if enabledKeyboard {
-		msg.ReplyMarkup = authorizationKeyboardButton
+	if showSearchResultsMode {
+		msg.ReplyMarkup = backToMainMenuMarkup
+		showSearchResultsMode = false
 	}
 
 	_, err := b.bot.Send(msg)

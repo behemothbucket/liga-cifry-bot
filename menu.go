@@ -8,9 +8,9 @@ const (
 )
 
 var (
-	enabledInlineKeyboard = false
-	mainMenuMarkup        = tgbotapi.NewInlineKeyboardMarkup()
-	cancelMenuMarkup      = tgbotapi.NewInlineKeyboardMarkup()
+	mainMenuMarkup       = getMainMenuMarkup()
+	cancelMenuMarkup     = getCancelMenuMarkup()
+	backToMainMenuMarkup = getBackMenuMarkup()
 )
 
 func (b *Bot) sendMainMenu(chatId int64) error {
@@ -53,6 +53,12 @@ func getUserSearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(cancelButton, cancelButton)),
+	)
+}
+
+func getBackMenuMarkup() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(backButton, backButton)),
 	)
 }
 
