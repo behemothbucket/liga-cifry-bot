@@ -6,15 +6,16 @@ import (
 	"reflect"
 )
 
-func isValidMessageText(message string) bool {
-	if reflect.TypeOf(message).Kind() == reflect.String && message != "" {
+func (b *Bot) isValidMessageText(update tgbotapi.Update) bool {
+	message := update.Message
+	if reflect.TypeOf(message.Text).Kind() == reflect.String && message.Text != "" {
 		return true
 	} else {
 		return false
 	}
 }
 
-func logMessage(user *tgbotapi.User, text string) {
+func logMessage(user *tgbotapi.User, text string, chatID int64) {
 	userName := user.UserName
 	firstName := user.FirstName
 	lastName := user.LastName
@@ -24,7 +25,7 @@ func logMessage(user *tgbotapi.User, text string) {
 		lastName = " " + lastName
 	}
 
-	log.Printf("https://t.me/%s [%d] (%s%s) написал(а) '%s'", userName, userID, firstName, lastName, text)
+	log.Printf("https://t.me/%s [ID:%d] (%s%s) написал(а) '%s' в чат [chatID:%d]", userName, userID, firstName, lastName, text, chatID)
 }
 
 func (b *Bot) sendAcceptMessage(chatID int64) error {
@@ -32,7 +33,7 @@ func (b *Bot) sendAcceptMessage(chatID int64) error {
 }
 
 func (b *Bot) sendSearchFinalMessage(chatID int64) error {
-	err := b.sendMessage(chatID, "✅ Вы заполнили все критерии")
+	err := b.SendMessage(chatID, "✅ Вы заполнили все критерии")
 	if err != nil {
 		return err
 	}
@@ -42,7 +43,7 @@ func (b *Bot) sendSearchFinalMessage(chatID int64) error {
 }
 
 func (b *Bot) sendMediaErrorMessage(chatID int64) error {
-	return b.sendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>")
+	return b.SendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>")
 }
 
 // TODO передавать какой-то объект для определения нужности markup
@@ -68,7 +69,7 @@ func (b *Bot) sendMarkupMessage(chatID int64, text string) error {
 	return err
 }
 
-func (b *Bot) sendMessage(chatID int64, text string) error {
+func (b *Bot) SendMessage(chatID int64, text string) error {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = tgbotapi.ModeHTML
 	_, err := b.bot.Send(msg)
