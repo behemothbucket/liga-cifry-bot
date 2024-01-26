@@ -16,7 +16,7 @@ func init() {
 }
 
 func main() {
-	b := NewBot()
+	b := newBot()
 
 	b.bot.Debug = false
 

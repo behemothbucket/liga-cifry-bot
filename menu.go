@@ -10,11 +10,11 @@ const (
 var (
 	mainMenuMarkup       = getMainMenuMarkup()
 	cancelMenuMarkup     = getCancelMenuMarkup()
-	backToMainMenuMarkup = getBackMenuMarkup()
+	backToMainMenuMarkup = getBackToMainMenuMarkup()
 )
 
-func (b *Bot) sendMainMenu(chatId int64) error {
-	return b.sendMarkupMessage(chatId, mainMenuDescription)
+func (b *Bot) sendMainMenu(chatId int64) {
+	b.SendMarkupMessage(chatId, mainMenuDescription)
 }
 
 func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
@@ -56,9 +56,9 @@ func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
-func getBackMenuMarkup() tgbotapi.InlineKeyboardMarkup {
+func getBackToMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(backButton, backButton)),
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(backToMainMenuButton, backToMainMenuButton)),
 	)
 }
 
