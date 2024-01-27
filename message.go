@@ -24,7 +24,7 @@ func isValidMessageText(update tgbotapi.Update) bool {
 	return valid
 }
 
-func isJoinEvent(update tgbotapi.Update) bool {
+func handleIfSubscriptionEvent(update tgbotapi.Update) bool {
 	var event bool
 	message := update.Message
 
@@ -38,7 +38,8 @@ func isJoinEvent(update tgbotapi.Update) bool {
 	if update.Message.LeftChatMember != nil {
 		go func() {
 			userID := update.Message.LeftChatMember.ID
-			DeleteUserSql(userID)
+			userName := update.Message.LeftChatMember.UserName
+			DeleteUserSql(userID, userName)
 		}()
 		event = true
 	}
@@ -46,17 +47,24 @@ func isJoinEvent(update tgbotapi.Update) bool {
 	return event
 }
 
-func logMessage(user *tgbotapi.User, text string, chatID int64) {
-	userName := user.UserName
-	firstName := user.FirstName
-	lastName := user.LastName
-	userID := user.ID
+func logMessage(update tgbotapi.Update) {
+	userName := update.Message.From.UserName
+	firstName := update.Message.From.FirstName
+	lastName := update.Message.From.LastName
+	userID := update.Message.From.ID
+	text := update.Message.Text
+	chatID := update.Message.Chat.ID
+	var groupName string
 
 	if lastName != "" {
 		lastName = " " + lastName
 	}
 
-	log.Printf("https://t.me/%s [ID:%d] (%s%s) написал(а) '%s' в чат [chatID:%d]", userName, userID, firstName, lastName, text, chatID)
+	if update.Message.Chat.Title != "" {
+		groupName = update.Message.Chat.Title
+	}
+
+	log.Printf("https://t.me/%s [ID:%d] (%s%s) написал(а) '%s' в чат [chatID:%d, group:%s].", userName, userID, firstName, lastName, text, chatID, groupName)
 }
 
 func (b *Bot) sendAcceptMessage(chatID int64) {

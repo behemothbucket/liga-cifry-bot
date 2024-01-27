@@ -49,12 +49,9 @@ func (b *Bot) handleUpdate(update tgbotapi.Update) {
 	switch {
 	case update.Message != nil:
 		b.handleMessage(update)
-		break
 	case update.CallbackQuery != nil:
 		b.handleButton(update.CallbackQuery)
-		break
 	}
-
 }
 
 func (b *Bot) handleMessage(update tgbotapi.Update) {
@@ -63,43 +60,31 @@ func (b *Bot) handleMessage(update tgbotapi.Update) {
 	}
 
 	chatID := update.Message.Chat.ID
-	user := update.Message.From
-	message := update.Message
 
-	logMessage(user, message.Text, chatID)
+	logMessage(update)
 
-	if isValidMessageText(update) && !isJoinEvent(update) {
-		switch {
-		case update.Message.IsCommand():
-			b.handleCommand(update)
-			break
-		case searchMode:
-			b.sendAcceptMessage(chatID)
-			break
-		default:
-			b.sendMainMenu(chatID)
-		}
-	} else {
+	switch {
+	case update.Message.IsCommand() && getChatType(update) == "private":
+		b.handleCommand(update)
+	case searchMode:
+		b.sendAcceptMessage(chatID)
+	case handleIfSubscriptionEvent(update):
+	case !isValidMessageText(update) && getChatType(update) == "private":
 		b.sendMediaErrorMessage(update.Message.Chat.ID)
+		b.sendMainMenu(chatID)
+	case getChatType(update) == "private":
+		b.sendMainMenu(chatID)
 	}
 }
 
 func (b *Bot) handleCommand(update tgbotapi.Update) {
 	command := update.Message.Text
-	chatType := update.Message.Chat.Type
 	chatID := update.Message.Chat.ID
 	botName := fmt.Sprintf("@%s", b.bot.Self.UserName)
-
-	if chatType == "group" || chatType == "supergroup" || chatType == "channel" {
-		log.Printf("Обнаружен чат с типом %s, блокирую комманду", chatType)
-		b.SendMessage(chatID, "Вы не являетесь <b>администратором</b>, чтобы использовать данную комманду.")
-		return
-	}
 
 	switch command {
 	case "/start", "/start" + botName:
 		b.sendMainMenu(chatID)
-		break
 	case "/user", "/user" + botName:
 		showSearchResultsMode = true
 		b.SendPhoto(chatID, "https://i.imgur.com/Gyk0eeI.png")
@@ -109,6 +94,10 @@ func (b *Bot) handleCommand(update tgbotapi.Update) {
 		b.SendMessage(chatID, organizationCard)
 		b.SendMarkupMessage(chatID, competitionCard)
 	}
+}
+
+func getChatType(update tgbotapi.Update) string {
+	return update.Message.Chat.Type
 }
 
 func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {

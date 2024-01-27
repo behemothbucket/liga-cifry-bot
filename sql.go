@@ -73,11 +73,11 @@ func userJoinGroup(db *sql.DB, id int64, userName string, firstName string, last
 		return err
 	}
 
-	log.Printf("[SQLite] Пользователь @%s с id=%d добавлен", userName, id)
+	log.Printf("[SQLite] Пользователь @%s с id=%d добавлен в группу.", userName, id)
 	return nil
 }
 
-func userLeftGroup(db *sql.DB, id int64) error {
+func userLeftGroup(db *sql.DB, id int64, userName string) error {
 	stmt, err := prepareStatement(db, userLeftGroupQuery)
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func userLeftGroup(db *sql.DB, id int64) error {
 		return err
 	}
 
-	log.Printf("[SQLite] Пользователь id=%d вышел", id)
+	log.Printf("[SQLite] Пользователь @%s с id=%d вышел из группы.", userName, id)
 	return nil
 }
 
@@ -106,14 +106,14 @@ func AddUserSql(id int64, userName string, firstName string, lastName string, is
 	}
 }
 
-func DeleteUserSql(id int64) {
+func DeleteUserSql(id int64, userName string) {
 	db, err := createConnection()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	err = userLeftGroup(db, id)
+	err = userLeftGroup(db, id, userName)
 	if err != nil {
 		log.Fatal(err)
 	}
