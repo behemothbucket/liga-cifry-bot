@@ -48,38 +48,38 @@ func (b *Bot) receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChanne
 func (b *Bot) handleUpdate(update tgbotapi.Update) {
 	switch {
 	case update.Message != nil:
-		b.handleMessage(update)
+		b.handleMessage(update.Message)
 	case update.CallbackQuery != nil:
 		b.handleButton(update.CallbackQuery)
 	}
 }
 
-func (b *Bot) handleMessage(update tgbotapi.Update) {
-	if update.Message.From == nil {
+func (b *Bot) handleMessage(message *tgbotapi.Message) {
+	if message.From == nil {
 		return
 	}
 
-	chatID := update.Message.Chat.ID
+	chatID := message.Chat.ID
 
-	logMessage(update)
+	logMessage(message)
 
 	switch {
-	case update.Message.IsCommand() && getChatType(update) == "private":
-		b.handleCommand(update)
+	case message.IsCommand() && getChatType(message) == "private":
+		b.handleCommand(message)
 	case searchMode:
 		b.sendAcceptMessage(chatID)
-	case handleIfSubscriptionEvent(update):
-	case !isValidMessageText(update) && getChatType(update) == "private":
-		b.sendMediaErrorMessage(update.Message.Chat.ID)
+	case handleIfSubscriptionEvent(message):
+	case !isValidMessageText(message) && getChatType(message) == "private":
+		b.sendMediaErrorMessage(message.Chat.ID)
 		b.sendMainMenu(chatID)
-	case getChatType(update) == "private":
+	case getChatType(message) == "private":
 		b.sendMainMenu(chatID)
 	}
 }
 
-func (b *Bot) handleCommand(update tgbotapi.Update) {
-	command := update.Message.Text
-	chatID := update.Message.Chat.ID
+func (b *Bot) handleCommand(message *tgbotapi.Message) {
+	command := message.Text
+	chatID := message.Chat.ID
 	botName := fmt.Sprintf("@%s", b.bot.Self.UserName)
 
 	switch command {
@@ -96,8 +96,8 @@ func (b *Bot) handleCommand(update tgbotapi.Update) {
 	}
 }
 
-func getChatType(update tgbotapi.Update) string {
-	return update.Message.Chat.Type
+func getChatType(message *tgbotapi.Message) string {
+	return message.Chat.Type
 }
 
 func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
@@ -118,10 +118,12 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 		text = mainMenuDescription
 		markup = mainMenuMarkup
 		removeAllSearchCriterias()
-	} else if query.Data == backToMainMenuButton {
+	} else if query.Data == menuButton {
 		text = mainMenuDescription
 		removeAllSearchCriterias()
 		b.sendMainMenu(message.Chat.ID)
+		callbackCfg := tgbotapi.NewCallback(query.ID, "")
+		b.bot.Send(callbackCfg)
 		return
 	} else if query.Data == applyButton {
 		if len(searchCriterias) == 0 {

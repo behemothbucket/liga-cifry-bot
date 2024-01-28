@@ -31,7 +31,7 @@ var (
 	searchUserButton       = "🔍 Индивидульные карточки"
 	searchUniversityButton = "🔍 Карточки организаций"
 	backButton             = "⬅️ Назад"
-	backToMainMenuButton   = "⬅️ В меню"
+	menuButton             = "📋 Меню"
 	cancelButton           = "❌ Отменить поиск"
 	applyButton            = "🆗 Применить"
 	searchButton           = "🔍 Искать"

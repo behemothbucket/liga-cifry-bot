@@ -58,7 +58,7 @@ func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 
 func getBackToMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(backToMainMenuButton, backToMainMenuButton)),
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(menuButton, menuButton)),
 	)
 }
 

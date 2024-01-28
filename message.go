@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"log"
 	"net/http"
 	"reflect"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type Message struct {
@@ -13,9 +14,8 @@ type Message struct {
 	chatID    int64
 }
 
-func isValidMessageText(update tgbotapi.Update) bool {
+func isValidMessageText(message *tgbotapi.Message) bool {
 	var valid bool
-	message := update.Message
 
 	if reflect.TypeOf(message.Text).Kind() == reflect.String && message.Text != "" {
 		valid = true
@@ -24,44 +24,44 @@ func isValidMessageText(update tgbotapi.Update) bool {
 	return valid
 }
 
-func handleIfSubscriptionEvent(update tgbotapi.Update) bool {
+func handleIfSubscriptionEvent(message *tgbotapi.Message) bool {
 	var event bool
-	message := update.Message
 
 	if len(message.NewChatMembers) != 0 {
-		go func() {
-			newUser := message.NewChatMembers[0]
-			AddUserSql(newUser.ID, newUser.UserName, newUser.FirstName, newUser.LastName, newUser.IsBot)
-		}()
+		go handleNewChatMembersEvent(&message.NewChatMembers[0])
 		event = true
 	}
-	if update.Message.LeftChatMember != nil {
-		go func() {
-			userID := update.Message.LeftChatMember.ID
-			userName := update.Message.LeftChatMember.UserName
-			DeleteUserSql(userID, userName)
-		}()
+	if message.LeftChatMember != nil {
+		go handleLeftChatMemberEvent(message.LeftChatMember)
 		event = true
 	}
 
 	return event
 }
 
-func logMessage(update tgbotapi.Update) {
-	userName := update.Message.From.UserName
-	firstName := update.Message.From.FirstName
-	lastName := update.Message.From.LastName
-	userID := update.Message.From.ID
-	text := update.Message.Text
-	chatID := update.Message.Chat.ID
+func handleNewChatMembersEvent(user *tgbotapi.User) {
+	AddUserSql(user.ID, user.UserName, user.FirstName, user.LastName, user.IsBot)
+}
+
+func handleLeftChatMemberEvent(user *tgbotapi.User) {
+	DeleteUserSql(user.ID, user.UserName)
+}
+
+func logMessage(message *tgbotapi.Message) {
+	userName := message.From.UserName
+	firstName := message.From.FirstName
+	lastName := message.From.LastName
+	userID := message.From.ID
+	text := message.Text
+	chatID := message.Chat.ID
 	var groupName string
 
 	if lastName != "" {
 		lastName = " " + lastName
 	}
 
-	if update.Message.Chat.Title != "" {
-		groupName = update.Message.Chat.Title
+	if message.Chat.Title != "" {
+		groupName = message.Chat.Title
 	}
 
 	log.Printf("https://t.me/%s [ID:%d] (%s%s) написал(а) '%s' в чат [chatID:%d, group:%s].", userName, userID, firstName, lastName, text, chatID, groupName)
