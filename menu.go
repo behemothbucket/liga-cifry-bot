@@ -13,8 +13,15 @@ var (
 	backToMainMenuMarkup = getBackToMainMenuMarkup()
 )
 
-func (b *Bot) sendMainMenu(chatId int64) {
-	b.SendMarkupMessage(chatId, mainMenuDescription)
+func (b *Bot) sendMainMenu(message *tgbotapi.Message) {
+	msg := &Message{
+		chatID:      message.Chat.ID,
+		text:        mainMenuDescription,
+		groupName:   message.Chat.Type,
+		replyMarkup: &mainMenuMarkup,
+		parseMode:   tgbotapi.ModeHTML,
+	}
+	b.SendMessage(msg)
 }
 
 func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
@@ -28,10 +35,10 @@ func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
-func getSearchMenuMarkup(searchType string) tgbotapi.InlineKeyboardMarkup {
+func getSearchMenuMarkup(searchScreen string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 
-	for _, btn := range searchButtons[searchType] {
+	for _, btn := range searchButtons[searchScreen] {
 		row := tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(btn, btn),
 		)
@@ -46,13 +53,9 @@ func getSearchMenuMarkup(searchType string) tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func getUserSearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {
-	return getSearchMenuMarkup("user")
-}
-
 func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(cancelButton, cancelButton)),
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(cancelSearchButton, cancelSearchButton)),
 	)
 }
 
@@ -60,8 +63,4 @@ func getBackToMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(menuButton, menuButton)),
 	)
-}
-
-func getUniversitySearchMenuMarkup() tgbotapi.InlineKeyboardMarkup {
-	return getSearchMenuMarkup("university")
 }

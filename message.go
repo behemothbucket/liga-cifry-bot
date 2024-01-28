@@ -9,9 +9,20 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+type User struct {
+	id        int64
+	userName  string
+	firstName string
+	lastName  string
+	isBot     bool
+}
+
 type Message struct {
-	parseMode string
-	chatID    int64
+	chatID      int64
+	text        string
+	groupName   string
+	replyMarkup *tgbotapi.InlineKeyboardMarkup
+	parseMode   string
 }
 
 func isValidMessageText(message *tgbotapi.Message) bool {
@@ -64,11 +75,18 @@ func logMessage(message *tgbotapi.Message) {
 		groupName = message.Chat.Title
 	}
 
-	log.Printf("https://t.me/%s [ID:%d] (%s%s) написал(а) '%s' в чат [chatID:%d, group:%s].", userName, userID, firstName, lastName, text, chatID, groupName)
+	log.Printf("https://t.me/%s [ID:%d] (%s%s) send message '%s' to chat [chatID:%d, group:%s]", userName, userID, firstName, lastName, text, chatID, groupName)
 }
 
-func (b *Bot) sendAcceptMessage(chatID int64) {
-	b.SendMarkupMessage(chatID, "<b>Ответ принят</b>\nЯ пока что в разработке...")
+func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
+	msg := &Message{
+		chatID:      message.Chat.ID,
+		text:        "<b>Ответ принят</b>\nЯ пока что в разработке...",
+		groupName:   message.Chat.Type,
+		replyMarkup: &cancelMenuMarkup,
+		parseMode:   tgbotapi.ModeHTML,
+	}
+	b.SendMessage(msg)
 }
 
 //func (b *Bot) sendSearchFinalMessage(chatID int64) {
@@ -77,40 +95,50 @@ func (b *Bot) sendAcceptMessage(chatID int64) {
 //	b.sendMainMenu(chatID)
 //}
 
-func (b *Bot) sendMediaErrorMessage(chatID int64) {
-	b.SendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>.")
-}
+// func (b *Bot) sendMediaErrorMessage(chatID int64) {
+// 	b.SendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>")
+// }
 
-// TODO передавать какой-то объект для определения нужности markup
-func (b *Bot) SendMarkupMessage(chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeHTML
+// TODO передавать структуру для определения нужности markup
+//func (b *Bot) SendMarkupMessage(chatID int64, text string) {
+//	msg := tgbotapi.NewMessage(chatID, text)
+//	msg.ParseMode = tgbotapi.ModeHTML
+//
+//	if searchMode {
+//		msg.ReplyMarkup = cancelMenuMarkup
+//	}
+//
+//	if !searchMode && !showSearchResultsMode {
+//		msg.ReplyMarkup = mainMenuMarkup
+//	}
+//
+//	if showSearchResultsMode {
+//		msg.ReplyMarkup = backToMainMenuMarkup
+//	}
+//
+//	if _, err := b.bot.Send(msg); err != nil {
+//		log.Fatalln(err)
+//	}
+//}
 
-	if searchMode {
-		msg.ReplyMarkup = cancelMenuMarkup
+func (b *Bot) SendMessage(message *Message) {
+	msg := tgbotapi.NewMessage(message.chatID, message.text)
+	msg.ParseMode = message.parseMode
+	if message.replyMarkup != nil {
+		msg.ReplyMarkup = message.replyMarkup
 	}
-
-	if !searchMode && !showSearchResultsMode {
-		msg.ReplyMarkup = mainMenuMarkup
-	}
-
-	if showSearchResultsMode {
-		msg.ReplyMarkup = backToMainMenuMarkup
-		showSearchResultsMode = false
-	}
-
 	if _, err := b.bot.Send(msg); err != nil {
 		log.Fatalln(err)
 	}
 }
 
-func (b *Bot) SendMessage(chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeHTML
-	if _, err := b.bot.Send(msg); err != nil {
-		log.Fatalln(err)
-	}
-}
+//func (b *Bot) SendMessage(chatID int64, text string) {
+//	msg := tgbotapi.NewMessage(chatID, text)
+//	msg.ParseMode = tgbotapi.ModeHTML
+//	if _, err := b.bot.Send(msg); err != nil {
+//		log.Fatalln(err)
+//	}
+//}
 
 func (b *Bot) SendPhoto(chatID int64, path string) {
 	//photo := tgbotapi.PhotoConfig{

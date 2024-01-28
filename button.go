@@ -32,7 +32,7 @@ var (
 	searchUniversityButton = "🔍 Карточки организаций"
 	backButton             = "⬅️ Назад"
 	menuButton             = "📋 Меню"
-	cancelButton           = "❌ Отменить поиск"
+	cancelSearchButton     = "❌ Отменить поиск"
 	applyButton            = "🆗 Применить"
 	searchButton           = "🔍 Искать"
 	addCard                = ""
@@ -44,27 +44,19 @@ func hasPrefix(button string, prefix string) bool {
 	return strings.Contains(button, prefix)
 }
 
-func removeSearchCriteria(criteria string) {
-	delete(searchCriterias, criteria)
-}
-
-func addSearchCriteria(criteria string) {
-	searchCriterias[criteria] = criteria
-}
-
-func removeAllSearchCriterias() {
-	for k := range searchCriterias {
-		delete(searchCriterias, k)
+func removeSearchCriterion(criteria string) {
+	if currentSearchScreen == "user" {
+		delete(userSearchCriteria, criteria)
+	} else {
+		delete(universitySearchCriteria, criteria)
 	}
 }
 
-func removeCriteriaByPrefix(screen []string, prefix string) {
-	for i, _ := range screen {
-		if hasPrefix(screen[i], prefix) {
-			key := strings.TrimPrefix(screen[i], prefix)
-			screen[i] = key
-			removeSearchCriteria(key)
-		}
+func addSearchCriterion(criteria string) {
+	if currentSearchScreen == "user" {
+		userSearchCriteria[criteria] = criteria
+	} else {
+		universitySearchCriteria[criteria] = criteria
 	}
 }
 
@@ -77,41 +69,58 @@ func findButtonIndex(buttons []string, targetButton string) int {
 	return -1
 }
 
-func toggleCriteriaButton(button string) {
+func toggleCriterionButton(button string) {
 	index := findButtonIndex(searchButtons[currentSearchScreen], button)
 
 	if hasPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix) {
-		removedPrefix := strings.TrimPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix)
-		searchButtons[currentSearchScreen][index] = removedPrefix
-		removeSearchCriteria(removedPrefix)
+		uncheckedButton := strings.TrimPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix)
+		searchButtons[currentSearchScreen][index] = uncheckedButton
+		removeSearchCriterion(uncheckedButton)
 	} else {
 		searchButtons[currentSearchScreen][index] = toggleButtonPrefix + button
-		addSearchCriteria(button)
+		addSearchCriterion(button)
 	}
 }
 
 func resetCriteriaButtons() {
-	removeCriteriaByPrefix(searchButtons[currentSearchScreen], toggleButtonPrefix)
-}
-
-func criteriaButtonIsClicked(button string) bool {
-	flag := false
-
-	for _, v := range searchButtons[currentSearchScreen] {
-		if button == v {
-			flag = true
-			break
+	for _, searchScreen := range searchButtons {
+		for i, button := range searchScreen {
+			if hasPrefix(button, toggleButtonPrefix) {
+				searchScreen[i] = strings.TrimPrefix(button, toggleButtonPrefix)
+				removeSearchCriterion(button)
+			}
 		}
 	}
-
-	return flag
+	for k := range userSearchCriteria {
+		delete(userSearchCriteria, k)
+	}
+	for k := range universitySearchCriteria {
+		delete(universitySearchCriteria, k)
+	}
 }
 
-func getCriteria() string {
-	val := ""
-	for _, v := range searchCriterias {
-		val = fmt.Sprintf("Введите критерий поиска <b>%s</b>", v)
-		currentCriteria = v
+func criterionButtonIsClicked(button string) string {
+	for _, v := range searchButtons[currentSearchScreen] {
+		if button == v {
+			return button
+		}
 	}
-	return val
+	return ""
+}
+
+func getCriterion() string {
+	var criterion string
+	var criteria map[string]string
+
+	if currentSearchScreen == "user" {
+		criteria = userSearchCriteria
+	} else {
+		criteria = universitySearchCriteria
+	}
+
+	for _, v := range criteria {
+		criterion = fmt.Sprintf("Введите критерий поиска <b>%s</b>", v)
+		currentCriterion = v
+	}
+	return criterion
 }

@@ -28,7 +28,7 @@ func getToken() string {
 	token, exists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
 
 	if !exists {
-		log.Print("Токен не обнаружен.")
+		log.Print("")
 	}
 
 	return token
@@ -59,21 +59,19 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) {
 		return
 	}
 
-	chatID := message.Chat.ID
-
 	logMessage(message)
 
 	switch {
 	case message.IsCommand() && getChatType(message) == "private":
 		b.handleCommand(message)
 	case searchMode:
-		b.sendAcceptMessage(chatID)
+		b.sendAcceptMessage(message)
 	case handleIfSubscriptionEvent(message):
 	case !isValidMessageText(message) && getChatType(message) == "private":
-		b.sendMediaErrorMessage(message.Chat.ID)
-		b.sendMainMenu(chatID)
+		// b.sendMediaErrorMessage(message.Chat.ID)
+		b.sendMainMenu(message)
 	case getChatType(message) == "private":
-		b.sendMainMenu(chatID)
+		b.sendMainMenu(message)
 	}
 }
 
@@ -82,17 +80,30 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	chatID := message.Chat.ID
 	botName := fmt.Sprintf("@%s", b.bot.Self.UserName)
 
+	msg := &Message{
+		chatID:      message.Chat.ID,
+		text:        "",
+		groupName:   message.Chat.Type,
+		replyMarkup: nil,
+		parseMode:   tgbotapi.ModeHTML,
+	}
+
 	switch command {
 	case "/start", "/start" + botName:
-		b.sendMainMenu(chatID)
+		b.sendMainMenu(message)
 	case "/user", "/user" + botName:
 		showSearchResultsMode = true
 		b.SendPhoto(chatID, "https://i.imgur.com/Gyk0eeI.png")
-		b.SendMarkupMessage(chatID, userCardElena)
+		msg.text = userCardElena
+		msg.replyMarkup = &backToMainMenuMarkup
+		b.SendMessage(msg)
+		showSearchResultsMode = false
 	case "/university", "/university@" + botName:
 		showSearchResultsMode = true
-		b.SendMessage(chatID, organizationCard)
-		b.SendMarkupMessage(chatID, competitionCard)
+		msg.text = organizationCard
+		msg.replyMarkup = &backToMainMenuMarkup
+		b.SendMessage(msg)
+		showSearchResultsMode = false
 	}
 }
 
@@ -106,51 +117,53 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 	markup := mainMenuMarkup
 	message := query.Message
 
-	if query.Data == searchUserButton {
-		text = searchMenuDescription
-		markup = getUserSearchMenuMarkup()
+	switch query.Data {
+	case searchUserButton:
 		currentSearchScreen = "user"
-	} else if query.Data == searchUniversityButton {
 		text = searchMenuDescription
-		markup = getUniversitySearchMenuMarkup()
+		markup = getCurrentSearchMarkup()
+	case searchUniversityButton:
 		currentSearchScreen = "university"
-	} else if query.Data == backButton {
+		text = searchMenuDescription
+		markup = getCurrentSearchMarkup()
+	case backButton:
 		text = mainMenuDescription
 		markup = mainMenuMarkup
-		removeAllSearchCriterias()
-	} else if query.Data == menuButton {
+	case menuButton:
+		//resetCriteriaButtons() // сбрасывать кнопки и чистить критерии после найденной карточки, а не здесь
 		text = mainMenuDescription
-		removeAllSearchCriterias()
-		b.sendMainMenu(message.Chat.ID)
+		b.sendMainMenu(message)
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
 		b.bot.Send(callbackCfg)
 		return
-	} else if query.Data == applyButton {
-		if len(searchCriterias) == 0 {
-			text = "️❗️Пожалуйста, выберите хотя-бы один критерий поиска."
-			markup = getUserSearchMenuMarkup()
+	case applyButton:
+		var criteria map[string]string
+
+		if currentSearchScreen == "user" {
+			criteria = userSearchCriteria
 		} else {
-			text = getCriteria()
-			searchMode = true
-			cancelMenuMarkup = getCancelMenuMarkup()
-			markup = cancelMenuMarkup
+			criteria = universitySearchCriteria
 		}
-	} else if query.Data == cancelButton {
-		removeAllSearchCriterias()
+
+		if len(criteria) == 0 {
+			text = "️❗️Пожалуйста, выберите хотя-бы один критерий поиска."
+			markup = getCurrentSearchMarkup()
+		} else {
+			text = getCriterion()
+			markup = getCancelMenuMarkup()
+			searchMode = true
+		}
+	case cancelSearchButton:
 		resetCriteriaButtons()
 		searchMode = false
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
 		b.bot.Send(callbackCfg)
-		b.sendMainMenu(message.Chat.ID)
+		b.sendMainMenu(message)
 		return
-	} else if criteriaButtonIsClicked(query.Data) {
-		toggleCriteriaButton(query.Data)
+	case criterionButtonIsClicked(query.Data):
+		toggleCriterionButton(query.Data)
 		text = searchMenuDescription
-		if currentSearchScreen == "user" {
-			markup = getUserSearchMenuMarkup()
-		} else {
-			markup = getUniversitySearchMenuMarkup()
-		}
+		markup = getCurrentSearchMarkup()
 	}
 
 	callbackCfg := tgbotapi.NewCallback(query.ID, "")
@@ -159,4 +172,12 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 	msg := tgbotapi.NewEditMessageTextAndMarkup(message.Chat.ID, message.MessageID, text, markup)
 	msg.ParseMode = tgbotapi.ModeHTML
 	b.bot.Send(msg)
+}
+
+func getCurrentSearchMarkup() tgbotapi.InlineKeyboardMarkup {
+	if currentSearchScreen == "user" {
+		return getSearchMenuMarkup("user")
+	} else {
+		return getSearchMenuMarkup("university")
+	}
 }

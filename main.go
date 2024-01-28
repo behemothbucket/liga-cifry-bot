@@ -30,7 +30,7 @@ func main() {
 
 	go b.receiveUpdates(ctx, updates)
 
-	log.Printf("Сервер запущен [%s]. Нажмите Enter для остановки...", b.bot.Self.UserName)
+	log.Printf("Bot [%s] starts. Press Enter to terminate...", b.bot.Self.UserName)
 
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 	cancel()

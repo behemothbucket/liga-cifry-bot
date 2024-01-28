@@ -73,7 +73,7 @@ func userJoinGroup(db *sql.DB, id int64, userName string, firstName string, last
 		return err
 	}
 
-	log.Printf("[SQLite] Пользователь @%s с id=%d добавлен в группу.", userName, id)
+	log.Printf("[SQLite] User @%s with id=%d joined the group", userName, id)
 	return nil
 }
 
@@ -89,7 +89,7 @@ func userLeftGroup(db *sql.DB, id int64, userName string) error {
 		return err
 	}
 
-	log.Printf("[SQLite] Пользователь @%s с id=%d вышел из группы.", userName, id)
+	log.Printf("[SQLite] User @%s with id=%d left group", userName, id)
 	return nil
 }
 
