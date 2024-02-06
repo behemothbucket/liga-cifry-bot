@@ -1,21 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"reflect"
+	sqlite "telegram-bot/storage/sqlite"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
-type User struct {
-	id        int64
-	userName  string
-	firstName string
-	lastName  string
-	isBot     bool
-}
 
 type Message struct {
 	chatID      int64
@@ -35,27 +29,28 @@ func isValidMessageText(message *tgbotapi.Message) bool {
 	return valid
 }
 
-func handleIfSubscriptionEvent(message *tgbotapi.Message) bool {
+func handleIfSubscriptionEvent(ctx context.Context, message *tgbotapi.Message) bool {
 	var event bool
 
+	s, err := sqlite.New("users.db")
+	if err != nil {
+		log.Panicf("can't connect to storage: %v ", err)
+	}
+
+	if err := s.Init(ctx); err != nil {
+		log.Panicf("can't init storage: %v ", err)
+	}
+
 	if len(message.NewChatMembers) != 0 {
-		go handleNewChatMembersEvent(&message.NewChatMembers[0])
+		go s.AddUser(ctx, &message.NewChatMembers[0])
 		event = true
 	}
 	if message.LeftChatMember != nil {
-		go handleLeftChatMemberEvent(message.LeftChatMember)
+		go s.DeleteUser(ctx, message.LeftChatMember)
 		event = true
 	}
 
 	return event
-}
-
-func handleNewChatMembersEvent(user *tgbotapi.User) {
-	AddUserSql(user.ID, user.UserName, user.FirstName, user.LastName, user.IsBot)
-}
-
-func handleLeftChatMemberEvent(user *tgbotapi.User) {
-	DeleteUserSql(user.ID, user.UserName)
 }
 
 func logMessage(message *tgbotapi.Message) {
@@ -79,7 +74,7 @@ func logMessage(message *tgbotapi.Message) {
 }
 
 func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
-	msg := &Message{
+	msg := Message{
 		chatID:      message.Chat.ID,
 		text:        "<b>Ответ принят</b>\nЯ пока что в разработке...",
 		groupName:   message.Chat.Type,
@@ -99,46 +94,16 @@ func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
 // 	b.SendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>")
 // }
 
-// TODO передавать структуру для определения нужности markup
-//func (b *Bot) SendMarkupMessage(chatID int64, text string) {
-//	msg := tgbotapi.NewMessage(chatID, text)
-//	msg.ParseMode = tgbotapi.ModeHTML
-//
-//	if searchMode {
-//		msg.ReplyMarkup = cancelMenuMarkup
-//	}
-//
-//	if !searchMode && !showSearchResultsMode {
-//		msg.ReplyMarkup = mainMenuMarkup
-//	}
-//
-//	if showSearchResultsMode {
-//		msg.ReplyMarkup = backToMainMenuMarkup
-//	}
-//
-//	if _, err := b.bot.Send(msg); err != nil {
-//		log.Fatalln(err)
-//	}
-//}
-
-func (b *Bot) SendMessage(message *Message) {
+func (b *Bot) SendMessage(message Message) {
 	msg := tgbotapi.NewMessage(message.chatID, message.text)
 	msg.ParseMode = message.parseMode
 	if message.replyMarkup != nil {
 		msg.ReplyMarkup = message.replyMarkup
 	}
 	if _, err := b.bot.Send(msg); err != nil {
-		log.Fatalln(err)
+		log.Panic(err)
 	}
 }
-
-//func (b *Bot) SendMessage(chatID int64, text string) {
-//	msg := tgbotapi.NewMessage(chatID, text)
-//	msg.ParseMode = tgbotapi.ModeHTML
-//	if _, err := b.bot.Send(msg); err != nil {
-//		log.Fatalln(err)
-//	}
-//}
 
 func (b *Bot) SendPhoto(chatID int64, path string) {
 	//photo := tgbotapi.PhotoConfig{
@@ -154,12 +119,12 @@ func (b *Bot) SendPhoto(chatID int64, path string) {
 	//	CaptionEntities: nil,
 	//}
 	//if _, err := b.bot.Send(photo); err != nil {
-	//	log.Fatalln(err)
+	//	log.Panic(err)
 	//}
 	requestURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendPhoto?chat_id=%d&photo=%s", b.TelegramApiToken, chatID, path)
 	_, err := http.Get(requestURL)
 	if err != nil {
-		log.Fatalln(err)
+		log.Panic(err)
 	}
 
 }

@@ -31,11 +31,14 @@ var (
 	searchUserButton       = "🔍 Индивидульные карточки"
 	searchUniversityButton = "🔍 Карточки организаций"
 	backButton             = "⬅️ Назад"
-	menuButton             = "📋 Меню"
+	menuButton             = "↩️ Меню"
 	cancelSearchButton     = "❌ Отменить поиск"
 	applyButton            = "🆗 Применить"
-	searchButton           = "🔍 Искать"
-	addCard                = ""
+	// searchButton               = "🔍 Искать"
+	printFirstPersonalCard     = "⚠️Персональная карточка⚠️"
+	printAllPersonalCards      = "⚠️Все персональные карточки⚠️"
+	printFirstOrganizationCard = "⚠️Карточка организации⚠️"
+	// addCard                    = ""
 
 	toggleButtonPrefix = "✅ "
 )
@@ -44,19 +47,19 @@ func hasPrefix(button string, prefix string) bool {
 	return strings.Contains(button, prefix)
 }
 
-func removeSearchCriterion(criteria string) {
-	if currentSearchScreen == "user" {
-		delete(userSearchCriteria, criteria)
+func (b *Bot) removeSearchCriterion(criteria string) {
+	if b.currentSearchScreen == "user" {
+		delete(b.userSearchCriteria, criteria)
 	} else {
-		delete(universitySearchCriteria, criteria)
+		delete(b.universitySearchCriteria, criteria)
 	}
 }
 
-func addSearchCriterion(criteria string) {
-	if currentSearchScreen == "user" {
-		userSearchCriteria[criteria] = criteria
+func (b *Bot) addSearchCriterion(criteria string) {
+	if b.currentSearchScreen == "user" {
+		b.userSearchCriteria[criteria] = criteria
 	} else {
-		universitySearchCriteria[criteria] = criteria
+		b.universitySearchCriteria[criteria] = criteria
 	}
 }
 
@@ -69,38 +72,38 @@ func findButtonIndex(buttons []string, targetButton string) int {
 	return -1
 }
 
-func toggleCriterionButton(button string) {
-	index := findButtonIndex(searchButtons[currentSearchScreen], button)
+func (b *Bot) toggleCriterionButton(button string) {
+	index := findButtonIndex(searchButtons[b.currentSearchScreen], button)
 
-	if hasPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix) {
-		uncheckedButton := strings.TrimPrefix(searchButtons[currentSearchScreen][index], toggleButtonPrefix)
-		searchButtons[currentSearchScreen][index] = uncheckedButton
-		removeSearchCriterion(uncheckedButton)
+	if hasPrefix(searchButtons[b.currentSearchScreen][index], toggleButtonPrefix) {
+		uncheckedButton := strings.TrimPrefix(searchButtons[b.currentSearchScreen][index], toggleButtonPrefix)
+		searchButtons[b.currentSearchScreen][index] = uncheckedButton
+		b.removeSearchCriterion(uncheckedButton)
 	} else {
-		searchButtons[currentSearchScreen][index] = toggleButtonPrefix + button
-		addSearchCriterion(button)
+		searchButtons[b.currentSearchScreen][index] = toggleButtonPrefix + button
+		b.addSearchCriterion(button)
 	}
 }
 
-func resetCriteriaButtons() {
+func (b *Bot) resetCriteriaButtons() {
 	for _, searchScreen := range searchButtons {
 		for i, button := range searchScreen {
 			if hasPrefix(button, toggleButtonPrefix) {
 				searchScreen[i] = strings.TrimPrefix(button, toggleButtonPrefix)
-				removeSearchCriterion(button)
+				b.removeSearchCriterion(button)
 			}
 		}
 	}
-	for k := range userSearchCriteria {
-		delete(userSearchCriteria, k)
+	for k := range b.userSearchCriteria {
+		delete(b.userSearchCriteria, k)
 	}
-	for k := range universitySearchCriteria {
-		delete(universitySearchCriteria, k)
+	for k := range b.universitySearchCriteria {
+		delete(b.universitySearchCriteria, k)
 	}
 }
 
-func criterionButtonIsClicked(button string) string {
-	for _, v := range searchButtons[currentSearchScreen] {
+func (b *Bot) criterionButtonIsClicked(button string) string {
+	for _, v := range searchButtons[b.currentSearchScreen] {
 		if button == v {
 			return button
 		}
@@ -108,19 +111,19 @@ func criterionButtonIsClicked(button string) string {
 	return ""
 }
 
-func getCriterion() string {
+func (b *Bot) getCriterion() string {
 	var criterion string
 	var criteria map[string]string
 
-	if currentSearchScreen == "user" {
-		criteria = userSearchCriteria
+	if b.currentSearchScreen == "user" {
+		criteria = b.userSearchCriteria
 	} else {
-		criteria = universitySearchCriteria
+		criteria = b.universitySearchCriteria
 	}
 
 	for _, v := range criteria {
 		criterion = fmt.Sprintf("Введите критерий поиска <b>%s</b>", v)
-		currentCriterion = v
+		// currentCriterion = v
 	}
 	return criterion
 }

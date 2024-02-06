@@ -14,7 +14,7 @@ var (
 )
 
 func (b *Bot) sendMainMenu(message *tgbotapi.Message) {
-	msg := &Message{
+	msg := Message{
 		chatID:      message.Chat.ID,
 		text:        mainMenuDescription,
 		groupName:   message.Chat.Type,
@@ -31,6 +31,15 @@ func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(searchUniversityButton, searchUniversityButton),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(printFirstPersonalCard, printFirstPersonalCard),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(printAllPersonalCards, printAllPersonalCards),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(printFirstOrganizationCard, printFirstOrganizationCard),
 		),
 	)
 }

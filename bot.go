@@ -3,32 +3,44 @@ package main
 import (
 	"context"
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"log"
 	"os"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type Bot struct {
-	bot              *tgbotapi.BotAPI
-	TelegramApiToken string
+	SpreadsheetConfig
+	bot                      *tgbotapi.BotAPI
+	TelegramApiToken         string
+	searchMode               bool
+	currentSearchScreen      string
+	userSearchCriteria       map[string]string
+	universitySearchCriteria map[string]string
 }
 
 func newBot() *Bot {
-	token := getToken()
+	token := getBotToken()
 
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	return &Bot{bot: bot, TelegramApiToken: token}
+	return &Bot{
+		bot:                      bot,
+		TelegramApiToken:         token,
+		SpreadsheetConfig:        *NewSpreadsheetConfig(),
+		userSearchCriteria:       map[string]string{},
+		universitySearchCriteria: map[string]string{},
+	}
 }
 
-func getToken() string {
+func getBotToken() string {
 	token, exists := os.LookupEnv("TELEGRAM_BOT_TOKEN")
 
 	if !exists {
-		log.Print("")
+		log.Panic("Token not found in .env")
 	}
 
 	return token
@@ -40,21 +52,21 @@ func (b *Bot) receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChanne
 		case <-ctx.Done():
 			return
 		case update := <-updates:
-			b.handleUpdate(update)
+			b.handleUpdate(ctx, update)
 		}
 	}
 }
 
-func (b *Bot) handleUpdate(update tgbotapi.Update) {
+func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	switch {
 	case update.Message != nil:
-		b.handleMessage(update.Message)
+		b.handleMessage(ctx, update.Message)
 	case update.CallbackQuery != nil:
 		b.handleButton(update.CallbackQuery)
 	}
 }
 
-func (b *Bot) handleMessage(message *tgbotapi.Message) {
+func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 	if message.From == nil {
 		return
 	}
@@ -64,11 +76,10 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) {
 	switch {
 	case message.IsCommand() && getChatType(message) == "private":
 		b.handleCommand(message)
-	case searchMode:
+	case b.searchMode:
 		b.sendAcceptMessage(message)
-	case handleIfSubscriptionEvent(message):
+	case handleIfSubscriptionEvent(ctx, message):
 	case !isValidMessageText(message) && getChatType(message) == "private":
-		// b.sendMediaErrorMessage(message.Chat.ID)
 		b.sendMainMenu(message)
 	case getChatType(message) == "private":
 		b.sendMainMenu(message)
@@ -77,33 +88,11 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) {
 
 func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	command := message.Text
-	chatID := message.Chat.ID
 	botName := fmt.Sprintf("@%s", b.bot.Self.UserName)
 
-	msg := &Message{
-		chatID:      message.Chat.ID,
-		text:        "",
-		groupName:   message.Chat.Type,
-		replyMarkup: nil,
-		parseMode:   tgbotapi.ModeHTML,
-	}
-
 	switch command {
-	case "/start", "/start" + botName:
+	case "/menu", "/menu" + botName, "/start", "/start" + botName:
 		b.sendMainMenu(message)
-	case "/user", "/user" + botName:
-		showSearchResultsMode = true
-		b.SendPhoto(chatID, "https://i.imgur.com/Gyk0eeI.png")
-		msg.text = userCardElena
-		msg.replyMarkup = &backToMainMenuMarkup
-		b.SendMessage(msg)
-		showSearchResultsMode = false
-	case "/university", "/university@" + botName:
-		showSearchResultsMode = true
-		msg.text = organizationCard
-		msg.replyMarkup = &backToMainMenuMarkup
-		b.SendMessage(msg)
-		showSearchResultsMode = false
 	}
 }
 
@@ -119,18 +108,18 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 
 	switch query.Data {
 	case searchUserButton:
-		currentSearchScreen = "user"
+		b.currentSearchScreen = "user"
 		text = searchMenuDescription
-		markup = getCurrentSearchMarkup()
+		markup = b.getCurrentSearchMarkup()
 	case searchUniversityButton:
-		currentSearchScreen = "university"
+		b.currentSearchScreen = "university"
 		text = searchMenuDescription
-		markup = getCurrentSearchMarkup()
+		markup = b.getCurrentSearchMarkup()
 	case backButton:
 		text = mainMenuDescription
 		markup = mainMenuMarkup
 	case menuButton:
-		//resetCriteriaButtons() // сбрасывать кнопки и чистить критерии после найденной карточки, а не здесь
+		//resetCriteriaButtons() // TODO сбрасывать кнопки и чистить критерии после найденной карточки, а не здесь
 		text = mainMenuDescription
 		b.sendMainMenu(message)
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
@@ -139,31 +128,73 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 	case applyButton:
 		var criteria map[string]string
 
-		if currentSearchScreen == "user" {
-			criteria = userSearchCriteria
+		if b.currentSearchScreen == "user" {
+			criteria = b.userSearchCriteria
 		} else {
-			criteria = universitySearchCriteria
+			criteria = b.universitySearchCriteria
 		}
 
 		if len(criteria) == 0 {
 			text = "️❗️Пожалуйста, выберите хотя-бы один критерий поиска."
-			markup = getCurrentSearchMarkup()
+			markup = b.getCurrentSearchMarkup()
 		} else {
-			text = getCriterion()
+			text = b.getCriterion()
 			markup = getCancelMenuMarkup()
-			searchMode = true
+			b.searchMode = true
 		}
 	case cancelSearchButton:
-		resetCriteriaButtons()
-		searchMode = false
+		b.resetCriteriaButtons()
+		b.searchMode = false
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
 		b.bot.Send(callbackCfg)
 		b.sendMainMenu(message)
 		return
-	case criterionButtonIsClicked(query.Data):
-		toggleCriterionButton(query.Data)
+	case b.criterionButtonIsClicked(query.Data):
+		b.toggleCriterionButton(query.Data)
 		text = searchMenuDescription
-		markup = getCurrentSearchMarkup()
+		markup = b.getCurrentSearchMarkup()
+	case printFirstPersonalCard:
+		card := b.SpreadsheetConfig.getCardByNumber(b.SpreadsheetConfig.personalSheetTitle, 1)
+		b.SendMessage(Message{
+			chatID:      message.Chat.ID,
+			text:        card,
+			groupName:   message.Chat.Type,
+			replyMarkup: &backToMainMenuMarkup,
+			parseMode:   tgbotapi.ModeHTML,
+		})
+		callbackCfg := tgbotapi.NewCallback(query.ID, "")
+		b.bot.Send(callbackCfg)
+	case printAllPersonalCards:
+		for i := 1; i < 9; i++ {
+			card := b.SpreadsheetConfig.getCardByNumber(b.SpreadsheetConfig.personalSheetTitle, i)
+			b.SendMessage(Message{
+				chatID:      message.Chat.ID,
+				text:        card,
+				groupName:   message.Chat.Type,
+				replyMarkup: &backToMainMenuMarkup,
+				parseMode:   tgbotapi.ModeHTML,
+			})
+		}
+		b.SendMessage(Message{
+			chatID:      message.Chat.ID,
+			text:        "✅ Показаны все персональные карточки",
+			groupName:   message.Chat.Type,
+			replyMarkup: nil,
+			parseMode:   tgbotapi.ModeHTML,
+		})
+		callbackCfg := tgbotapi.NewCallback(query.ID, "")
+		b.bot.Send(callbackCfg)
+	case printFirstOrganizationCard:
+		card := b.SpreadsheetConfig.getCardByNumber(b.SpreadsheetConfig.organizationSheetTitle, 1)
+		b.SendMessage(Message{
+			chatID:      message.Chat.ID,
+			text:        card,
+			groupName:   message.Chat.Type,
+			replyMarkup: &backToMainMenuMarkup,
+			parseMode:   tgbotapi.ModeHTML,
+		})
+		callbackCfg := tgbotapi.NewCallback(query.ID, "")
+		b.bot.Send(callbackCfg)
 	}
 
 	callbackCfg := tgbotapi.NewCallback(query.ID, "")
@@ -174,8 +205,8 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 	b.bot.Send(msg)
 }
 
-func getCurrentSearchMarkup() tgbotapi.InlineKeyboardMarkup {
-	if currentSearchScreen == "user" {
+func (b *Bot) getCurrentSearchMarkup() tgbotapi.InlineKeyboardMarkup {
+	if b.currentSearchScreen == "user" {
 		return getSearchMenuMarkup("user")
 	} else {
 		return getSearchMenuMarkup("university")
