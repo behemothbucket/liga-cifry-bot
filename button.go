@@ -28,16 +28,17 @@ var (
 		},
 	}
 
-	searchUserButton       = "🔍 Индивидульные карточки"
-	searchUniversityButton = "🔍 Карточки организаций"
-	backButton             = "⬅️ Назад"
-	menuButton             = "↩️ Меню"
-	cancelSearchButton     = "❌ Отменить поиск"
-	applyButton            = "🆗 Применить"
-	// searchButton               = "🔍 Искать"
+	searchUserButton           = "🔍 Индивидульные карточки"
+	searchUniversityButton     = "🔍 Карточки организаций"
+	backButton                 = "⬅️ Назад"
+	menuButton                 = "↩️ Меню"
+	cancelSearchButton         = "❌ Отменить поиск"
+	applyButton                = "🆗 Применить"
+	searchButton               = "🔍 Искать"
 	printFirstPersonalCard     = "⚠️Персональная карточка⚠️"
 	printAllPersonalCards      = "⚠️Все персональные карточки⚠️"
 	printFirstOrganizationCard = "⚠️Карточка организации⚠️"
+	loadMoreButton             = "⏬ Загрузить еще 5"
 	// addCard                    = ""
 
 	toggleButtonPrefix = "✅ "

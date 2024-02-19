@@ -78,6 +78,7 @@ func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
 		b.handleCommand(message)
 	case b.searchMode:
 		b.sendAcceptMessage(message)
+		b.sendLoadMoreMessage(message)
 	case handleIfSubscriptionEvent(ctx, message):
 	case !isValidMessageText(message) && getChatType(message) == "private":
 		b.sendMainMenu(message)
@@ -119,7 +120,7 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 		text = mainMenuDescription
 		markup = mainMenuMarkup
 	case menuButton:
-		//resetCriteriaButtons() // TODO сбрасывать кнопки и чистить критерии после найденной карточки, а не здесь
+		// resetCriteriaButtons() // TODO сбрасывать кнопки и чистить критерии после найденной карточки, а не здесь
 		text = mainMenuDescription
 		b.sendMainMenu(message)
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
@@ -175,13 +176,14 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 				parseMode:   tgbotapi.ModeHTML,
 			})
 		}
-		b.SendMessage(Message{
-			chatID:      message.Chat.ID,
-			text:        "✅ Показаны все персональные карточки",
-			groupName:   message.Chat.Type,
-			replyMarkup: nil,
-			parseMode:   tgbotapi.ModeHTML,
-		})
+		b.sendLoadMoreMessage(message)
+		// b.SendMessage(Message{
+		// 	chatID:      message.Chat.ID,
+		// 	text:        "✅ Показаны все персональные карточки",
+		// 	groupName:   message.Chat.Type,
+		// 	replyMarkup: nil,
+		// 	parseMode:   tgbotapi.ModeHTML,
+		// })
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
 		b.bot.Send(callbackCfg)
 	case printFirstOrganizationCard:

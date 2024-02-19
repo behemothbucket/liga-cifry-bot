@@ -28,11 +28,11 @@ func NewSpreadsheetConfig() *SpreadsheetConfig {
 	client := conf.Client(context.TODO())
 	service := spreadsheet.NewServiceWithClient(client)
 
-	spreadsheetId := getSpreadsheetId()
+	sheetId := getSpreadsheetId()
 
 	return &SpreadsheetConfig{
 		service:                service,
-		sheetId:                spreadsheetId,
+		sheetId:                sheetId,
 		personalSheetTitle:     "Индивидуальные карточки",
 		organizationSheetTitle: "Карточки организаций",
 	}

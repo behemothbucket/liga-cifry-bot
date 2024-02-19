@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"net/http"
 	"reflect"
 	sqlite "telegram-bot/storage/sqlite"
 
@@ -70,7 +68,8 @@ func logMessage(message *tgbotapi.Message) {
 		groupName = message.Chat.Title
 	}
 
-	log.Printf("https://t.me/%s [ID:%d] (%s%s) send message '%s' to chat [chatID:%d, group:%s]", userName, userID, firstName, lastName, text, chatID, groupName)
+	log.Printf("https://t.me/%s [ID:%d] (%s%s) send message '%s' to chat [chatID:%d, group:%s]",
+		userName, userID, firstName, lastName, text, chatID, groupName)
 }
 
 func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
@@ -84,15 +83,16 @@ func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
 	b.SendMessage(msg)
 }
 
-//func (b *Bot) sendSearchFinalMessage(chatID int64) {
-//	b.SendMessage(chatID, "✅ Вы заполнили все критерии")
-//	showSearchResultsMode = false
-//	b.sendMainMenu(chatID)
-//}
-
-// func (b *Bot) sendMediaErrorMessage(chatID int64) {
-// 	b.SendMessage(chatID, "❌ Файлы, фото/видео и другие медиа <b>не принимаются</b>")
-// }
+func (b *Bot) sendLoadMoreMessage(message *tgbotapi.Message) {
+	msg := Message{
+		chatID:      message.Chat.ID,
+		text:        "<b>Загрузить больше вариантов</b>",
+		groupName:   message.Chat.Type,
+		replyMarkup: &loadMoreMenuMarkup,
+		parseMode:   tgbotapi.ModeHTML,
+	}
+	b.SendMessage(msg)
+}
 
 func (b *Bot) SendMessage(message Message) {
 	msg := tgbotapi.NewMessage(message.chatID, message.text)
@@ -103,28 +103,4 @@ func (b *Bot) SendMessage(message Message) {
 	if _, err := b.bot.Send(msg); err != nil {
 		log.Panic(err)
 	}
-}
-
-func (b *Bot) SendPhoto(chatID int64, path string) {
-	//photo := tgbotapi.PhotoConfig{
-	//	BaseFile: tgbotapi.BaseFile{
-	//		BaseChat: tgbotapi.BaseChat{
-	//			ChatID: chatID,
-	//		},
-	//		File: tgbotapi.FilePath(path),
-	//	},
-	//	Thumb:           nil,
-	//	Caption:         caption,
-	//	ParseMode:       tgbotapi.ModeHTML,
-	//	CaptionEntities: nil,
-	//}
-	//if _, err := b.bot.Send(photo); err != nil {
-	//	log.Panic(err)
-	//}
-	requestURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendPhoto?chat_id=%d&photo=%s", b.TelegramApiToken, chatID, path)
-	_, err := http.Get(requestURL)
-	if err != nil {
-		log.Panic(err)
-	}
-
 }

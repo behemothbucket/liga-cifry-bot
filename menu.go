@@ -1,6 +1,8 @@
 package main
 
-import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+import (
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
 
 const (
 	mainMenuDescription   = "Выберите вариант поиска"
@@ -10,6 +12,7 @@ const (
 var (
 	mainMenuMarkup       = getMainMenuMarkup()
 	cancelMenuMarkup     = getCancelMenuMarkup()
+	loadMoreMenuMarkup   = getLoadMoreMenuMarkup()
 	backToMainMenuMarkup = getBackToMainMenuMarkup()
 )
 
@@ -71,5 +74,11 @@ func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 func getBackToMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(menuButton, menuButton)),
+	)
+}
+
+func getLoadMoreMenuMarkup() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loadMoreButton, loadMoreButton)),
 	)
 }

@@ -18,6 +18,7 @@ type Storage struct {
 // New is used to create new Storage.
 func New(path string) (*Storage, error) {
 	db, err := sql.Open("sqlite3", path)
+
 	if err != nil {
 		return nil, fmt.Errorf("can't open database: %w", err)
 	}
@@ -31,7 +32,7 @@ func New(path string) (*Storage, error) {
 
 // AddUser is used to add User from database.
 func (s *Storage) AddUser(ctx context.Context, u *tgbotapi.User) error {
-	q := `INSERT INTO users (id, user_name, first_name, last_name, is_bot, date_created) VALUES (?, ?, ?, ?, ?, ?);`
+	q := `INSERT INTO users (id, user_name, first_name, last_name, is_bot, date_joined) VALUES (?, ?, ?, ?, ?, ?);`
 
 	currentTime := time.Now().Format("01-02-2006 15:04:05")
 
@@ -45,6 +46,7 @@ func (s *Storage) AddUser(ctx context.Context, u *tgbotapi.User) error {
 // DeleteUser is used to delete User from database.
 func (s *Storage) DeleteUser(ctx context.Context, u *tgbotapi.User) error {
 	q := `DELETE FROM users WHERE id = ? AND userName = ?;`
+
 	if _, err := s.db.ExecContext(ctx, q, u.ID, u.UserName); err != nil {
 		return fmt.Errorf("can't delete user: %w", err)
 	}
@@ -74,7 +76,7 @@ func (s *Storage) Init(ctx context.Context) error {
 		first_name TEXT,
 		last_name TEXT,
 		is_bot INTEGER,
-		date_created TEXT
+		date_joined TEXT
 	);`
 
 	if _, err := s.db.ExecContext(ctx, q); err != nil {

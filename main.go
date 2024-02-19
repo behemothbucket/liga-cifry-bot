@@ -22,6 +22,7 @@ func main() {
 	b.bot.Debug = false
 
 	u := tgbotapi.NewUpdate(0)
+
 	u.Timeout = 60
 
 	ctx := context.Background()
