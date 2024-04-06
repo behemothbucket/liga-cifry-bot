@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"log"
 	"reflect"
-	sqlite "telegram-bot/storage/sqlite"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -27,29 +25,21 @@ func isValidMessageText(message *tgbotapi.Message) bool {
 	return valid
 }
 
-func handleIfSubscriptionEvent(ctx context.Context, message *tgbotapi.Message) bool {
-	var event bool
-
-	s, err := sqlite.New("users.db")
-	if err != nil {
-		log.Panicf("can't connect to storage: %v ", err)
-	}
-
-	if err := s.Init(ctx); err != nil {
-		log.Panicf("can't init storage: %v ", err)
-	}
-
-	if len(message.NewChatMembers) != 0 {
-		go s.AddUser(ctx, &message.NewChatMembers[0])
-		event = true
-	}
-	if message.LeftChatMember != nil {
-		go s.DeleteUser(ctx, message.LeftChatMember)
-		event = true
-	}
-
-	return event
-}
+// func handleIfSubscriptionEvent(ctx context.Context, message *tgbotapi.Message) bool {
+// var event bool
+//
+//
+// if len(message.NewChatMembers) != 0 {
+// 	go s.AddUser(ctx, &message.NewChatMembers[0])
+// 	event = true
+// }
+// if message.LeftChatMember != nil {
+// 	go s.DeleteUser(ctx, message.LeftChatMember)
+// 	event = true
+// }
+//
+// return event
+// }
 
 func logMessage(message *tgbotapi.Message) {
 	userName := message.From.UserName

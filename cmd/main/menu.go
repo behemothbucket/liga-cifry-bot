@@ -42,7 +42,10 @@ func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 			tgbotapi.NewInlineKeyboardButtonData(printAllPersonalCards, printAllPersonalCards),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(printFirstOrganizationCard, printFirstOrganizationCard),
+			tgbotapi.NewInlineKeyboardButtonData(
+				printFirstOrganizationCard,
+				printFirstOrganizationCard,
+			),
 		),
 	)
 }
@@ -67,7 +70,9 @@ func getSearchMenuMarkup(searchScreen string) tgbotapi.InlineKeyboardMarkup {
 
 func getCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(cancelSearchButton, cancelSearchButton)),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(cancelSearchButton, cancelSearchButton),
+		),
 	)
 }
 
@@ -79,6 +84,8 @@ func getBackToMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 
 func getLoadMoreMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loadMoreButton, loadMoreButton)),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(loadMoreButton, loadMoreButton),
+		),
 	)
 }

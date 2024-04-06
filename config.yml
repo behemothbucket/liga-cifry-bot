@@ -1,0 +1,6 @@
+---
+host: 172.22.217.76
+port: 5432
+database: liga_cifry
+username: postgres
+password: 7406

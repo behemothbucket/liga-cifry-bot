@@ -77,7 +77,10 @@ func (b *Bot) toggleCriterionButton(button string) {
 	index := findButtonIndex(searchButtons[b.currentSearchScreen], button)
 
 	if hasPrefix(searchButtons[b.currentSearchScreen][index], toggleButtonPrefix) {
-		uncheckedButton := strings.TrimPrefix(searchButtons[b.currentSearchScreen][index], toggleButtonPrefix)
+		uncheckedButton := strings.TrimPrefix(
+			searchButtons[b.currentSearchScreen][index],
+			toggleButtonPrefix,
+		)
 		searchButtons[b.currentSearchScreen][index] = uncheckedButton
 		b.removeSearchCriterion(uncheckedButton)
 	} else {
@@ -109,6 +112,7 @@ func (b *Bot) criterionButtonIsClicked(button string) string {
 			return button
 		}
 	}
+
 	return ""
 }
 
