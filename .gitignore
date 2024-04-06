@@ -24,6 +24,7 @@ go.work
 .env
 *.json
 *.db
+service-account-key.json
 
 # Others
 todo
