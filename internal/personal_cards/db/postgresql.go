@@ -22,7 +22,7 @@ func NewRepository(client postgresql.Client) personal_cards.Repository {
 }
 
 func (r *repository) ShowAllPersonalCards(ctx context.Context) (pc []personal_cards.PersonalCard, err error) {
-	q := `SELECT * FROM public.personal_cards;`
+	q := `SELECT * FROM personal_cards;`
 	rows, err := r.client.Query(ctx, q)
 	if err != nil {
 		return nil, err

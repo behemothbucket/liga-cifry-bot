@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"reflect"
 
@@ -26,15 +25,15 @@ func isValidMessageText(message *tgbotapi.Message) bool {
 	return valid
 }
 
-func handleIfSubscriptionEvent(ctx context.Context, message *tgbotapi.Message) bool {
+func handleIfSubscriptionEvent(message *tgbotapi.Message) bool {
 	var event bool
 
 	if len(message.NewChatMembers) != 0 {
-		go s.AddUser(ctx, &message.NewChatMembers[0])
+		go SqlTestJoinUser(&message.NewChatMembers[0])
 		event = true
 	}
 	if message.LeftChatMember != nil {
-		go s.DeleteUser(ctx, message.LeftChatMember)
+		go SqlTestLeaveUser(message.LeftChatMember)
 		event = true
 	}
 

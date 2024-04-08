@@ -6,29 +6,63 @@ import (
 	"log"
 	"os"
 
+	pc "telegram-bot/internal/personal_cards/db"
+	u "telegram-bot/internal/user/db"
+
 	"telegram-bot/internal/config"
 	"telegram-bot/internal/personal_cards"
-	PC "telegram-bot/internal/personal_cards/db"
 	"telegram-bot/pkg/client/postgresql"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func SQLTEST() []personal_cards.PersonalCard {
+func SqlTestShowAllCards() []personal_cards.PersonalCard {
 	cfg := config.GetConfig()
 	postgreSQLClient, err := postgresql.NewClient(context.TODO(), 3, *cfg)
 	if err != nil {
-		log.Panic("%v", err)
+		log.Panicf("%v", err)
 	}
 
-	repository := PC.NewRepository(postgreSQLClient)
+	repository := pc.NewRepository(postgreSQLClient)
 
 	cards, err := repository.ShowAllPersonalCards(context.TODO())
 	if err != nil {
-		log.Panic("%v", err)
+		log.Panicf("%v", err)
 	}
 
 	return cards
+}
+
+func SqlTestJoinUser(user *tgbotapi.User) {
+	cfg := config.GetConfig()
+	postgreSQLClient, err := postgresql.NewClient(context.TODO(), 3, *cfg)
+	if err != nil {
+		log.Panicf("%v", err)
+	}
+
+	repository := u.NewRepository(postgreSQLClient)
+
+	err = repository.JoinGroup(context.TODO(), user)
+	if err != nil {
+		log.Panicf("%v", err)
+		return
+	}
+}
+
+func SqlTestLeaveUser(user *tgbotapi.User) {
+	cfg := config.GetConfig()
+	postgreSQLClient, err := postgresql.NewClient(context.TODO(), 3, *cfg)
+	if err != nil {
+		log.Panicf("%v", err)
+	}
+
+	repository := u.NewRepository(postgreSQLClient)
+
+	err = repository.LeaveGroup(context.TODO(), user)
+	if err != nil {
+		log.Panicf("%v", err)
+		return
+	}
 }
 
 type Bot struct {
@@ -105,8 +139,8 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) {
 		b.sendMainMenu(message)
 	case getChatType(message) == "private":
 		b.sendMainMenu(message)
-		// default:
-		// handleIfSubscriptionEvent(ctx, message)
+	default:
+		handleIfSubscriptionEvent(message)
 	}
 }
 
@@ -181,7 +215,7 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 		text = b.Menu.searchMenuDescription
 		markup = b.getCurrentSearchMarkup()
 	case printAllPersonalCards:
-		cards := SQLTEST()
+		cards := SqlTestShowAllCards()
 		log.Printf("%s хочет получить все карточки пользователей", message.Chat.UserName)
 		for _, card := range cards {
 			formattedText := fmt.Sprintf(
@@ -205,7 +239,7 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 
 <b>📱Контакты для связи</b>
 %s`,
-				card.fio, card.city, card.organization, card.job_title, card.expert_competencies, card.possible_cooperation, card.contacts,
+				card.Fio, card.City, card.Organization, card.Job_title, card.Expert_competencies, card.Possible_cooperation, card.Contacts,
 			)
 			b.SendMessage(Message{
 				chatID:      message.Chat.ID,
