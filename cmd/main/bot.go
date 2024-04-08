@@ -18,14 +18,14 @@ func SQLTEST() []personal_cards.PersonalCard {
 	cfg := config.GetConfig()
 	postgreSQLClient, err := postgresql.NewClient(context.TODO(), 3, *cfg)
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Panic("%v", err)
 	}
 
 	repository := PC.NewRepository(postgreSQLClient)
 
 	cards, err := repository.ShowAllPersonalCards(context.TODO())
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Panic("%v", err)
 	}
 
 	return cards
@@ -33,6 +33,7 @@ func SQLTEST() []personal_cards.PersonalCard {
 
 type Bot struct {
 	bot                      *tgbotapi.BotAPI
+	Menu                     Menu
 	TelegramApiToken         string
 	searchMode               bool
 	currentSearchScreen      string
@@ -50,6 +51,7 @@ func newBot() *Bot {
 
 	return &Bot{
 		bot:                      bot,
+		Menu:                     initMenu(),
 		TelegramApiToken:         token,
 		userSearchCriteria:       map[string]string{},
 		universitySearchCriteria: map[string]string{},
@@ -72,21 +74,21 @@ func (b *Bot) receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChanne
 		case <-ctx.Done():
 			return
 		case update := <-updates:
-			b.handleUpdate(ctx, update)
+			b.handleUpdate(update)
 		}
 	}
 }
 
-func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
+func (b *Bot) handleUpdate(update tgbotapi.Update) {
 	switch {
 	case update.Message != nil:
-		b.handleMessage(ctx, update.Message)
+		b.handleMessage(update.Message)
 	case update.CallbackQuery != nil:
-		b.handleButton(update.CallbackQuery, ctx)
+		b.handleButton(update.CallbackQuery)
 	}
 }
 
-func (b *Bot) handleMessage(ctx context.Context, message *tgbotapi.Message) {
+func (b *Bot) handleMessage(message *tgbotapi.Message) {
 	if message.From == nil {
 		return
 	}
@@ -122,30 +124,33 @@ func getChatType(message *tgbotapi.Message) string {
 	return message.Chat.Type
 }
 
-func (b *Bot) handleButton(query *tgbotapi.CallbackQuery, ctx context.Context) {
+func (b *Bot) handleButton(query *tgbotapi.CallbackQuery) {
 	var text string
 
-	markup := mainMenuMarkup
+	markup := b.Menu.mainMenuMarkup
 	message := query.Message
 
 	switch query.Data {
 	case searchUserButton:
 		b.currentSearchScreen = "user"
-		text = searchMenuDescription
+		text = b.Menu.searchMenuDescription
 		markup = b.getCurrentSearchMarkup()
 	case searchUniversityButton:
 		b.currentSearchScreen = "university"
-		text = searchMenuDescription
+		text = b.Menu.searchMenuDescription
 		markup = b.getCurrentSearchMarkup()
 	case backButton:
-		text = mainMenuDescription
-		markup = mainMenuMarkup
+		text = b.Menu.mainMenuDescription
+		markup = b.Menu.mainMenuMarkup
 	case menuButton:
-		text = mainMenuDescription
+		text = b.Menu.mainMenuDescription
 		// resetCriteriaButtons() // TODO сбрасывать кнопки и чистить критерии после найденной карточки, а не здесь
 		b.sendMainMenu(message)
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
-		b.bot.Send(callbackCfg)
+		_, err := b.bot.Send(callbackCfg)
+		if err != nil {
+			log.Panicf("%v", err)
+		}
 		return
 	case applyButton:
 		var criteria map[string]string
@@ -164,7 +169,6 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery, ctx context.Context) {
 			markup = getCancelMenuMarkup()
 			b.searchMode = true
 		}
-
 	case cancelSearchButton:
 		b.resetCriteriaButtons()
 		b.searchMode = false
@@ -172,22 +176,10 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery, ctx context.Context) {
 		b.bot.Send(callbackCfg)
 		b.sendMainMenu(message)
 		return
-
 	case b.criterionButtonIsClicked(query.Data):
 		b.toggleCriterionButton(query.Data)
-		text = searchMenuDescription
+		text = b.Menu.searchMenuDescription
 		markup = b.getCurrentSearchMarkup()
-	// case printFirstPersonalCard:
-	// 	card := b.SpreadsheetConfig.getCardByNumber(b.SpreadsheetConfig.personalSheetTitle, 1)
-	// 	b.SendMessage(Message{
-	// 		chatID:      message.Chat.ID,
-	// 		text:        card,
-	// 		groupName:   message.Chat.Type,
-	// 		replyMarkup: &backToMainMenuMarkup,
-	// 		parseMode:   tgbotapi.ModeHTML,
-	// 	})
-	// 	callbackCfg := tgbotapi.NewCallback(query.ID, "")
-	// 	b.bot.Send(callbackCfg)
 	case printAllPersonalCards:
 		cards := SQLTEST()
 		log.Printf("%s хочет получить все карточки пользователей", message.Chat.UserName)
@@ -213,38 +205,19 @@ func (b *Bot) handleButton(query *tgbotapi.CallbackQuery, ctx context.Context) {
 
 <b>📱Контакты для связи</b>
 %s`,
-				card.Fio, card.City, card.Organization, card.Job_title, card.Expert_competencies, card.Possible_cooperation, card.Contacts,
+				card.fio, card.city, card.organization, card.job_title, card.expert_competencies, card.possible_cooperation, card.contacts,
 			)
 			b.SendMessage(Message{
 				chatID:      message.Chat.ID,
 				text:        formattedText,
 				groupName:   message.Chat.Type,
-				replyMarkup: &backToMainMenuMarkup,
+				replyMarkup: &b.Menu.backToMainMenuMarkup,
 				parseMode:   tgbotapi.ModeHTML,
 			})
 		}
 		b.sendLoadMoreMessage(message)
-		// b.SendMessage(Message{
-		// 	chatID:      message.Chat.ID,
-		// 	text:        "✅ Показаны все персональные карточки",
-		// 	groupName:   message.Chat.Type,
-		// 	replyMarkup: nil,
-		// 	parseMode:   tgbotapi.ModeHTML,
-		// })
 		callbackCfg := tgbotapi.NewCallback(query.ID, "")
 		b.bot.Send(callbackCfg)
-		// case printFirstOrganizationCard:
-		// 	card := b.SpreadsheetConfig.getCardByNumber(b.SpreadsheetConfig.organizationSheetTitle, 1)
-		// 	b.SendMessage(Message{
-		// 		chatID:      message.Chat.ID,
-		// 		text:        card,
-		// 		groupName:   message.Chat.Type,
-		// 		replyMarkup: &backToMainMenuMarkup,
-		// 		parseMode:   tgbotapi.ModeHTML,
-		// 	})
-		// 	callbackCfg := tgbotapi.NewCallback(query.ID, "")
-		// 	b.bot.Send(callbackCfg)
-
 	}
 
 	callbackCfg := tgbotapi.NewCallback(query.ID, "")

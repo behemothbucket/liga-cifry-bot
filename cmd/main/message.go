@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"reflect"
 
@@ -25,21 +26,20 @@ func isValidMessageText(message *tgbotapi.Message) bool {
 	return valid
 }
 
-// func handleIfSubscriptionEvent(ctx context.Context, message *tgbotapi.Message) bool {
-// var event bool
-//
-//
-// if len(message.NewChatMembers) != 0 {
-// 	go s.AddUser(ctx, &message.NewChatMembers[0])
-// 	event = true
-// }
-// if message.LeftChatMember != nil {
-// 	go s.DeleteUser(ctx, message.LeftChatMember)
-// 	event = true
-// }
-//
-// return event
-// }
+func handleIfSubscriptionEvent(ctx context.Context, message *tgbotapi.Message) bool {
+	var event bool
+
+	if len(message.NewChatMembers) != 0 {
+		go s.AddUser(ctx, &message.NewChatMembers[0])
+		event = true
+	}
+	if message.LeftChatMember != nil {
+		go s.DeleteUser(ctx, message.LeftChatMember)
+		event = true
+	}
+
+	return event
+}
 
 func logMessage(message *tgbotapi.Message) {
 	userName := message.From.UserName
@@ -67,7 +67,7 @@ func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
 		chatID:      message.Chat.ID,
 		text:        "<b>Ответ принят</b>\nЯ пока что в разработке...",
 		groupName:   message.Chat.Type,
-		replyMarkup: &cancelMenuMarkup,
+		replyMarkup: &b.Menu.cancelMenuMarkup,
 		parseMode:   tgbotapi.ModeHTML,
 	}
 	b.SendMessage(msg)
@@ -78,7 +78,7 @@ func (b *Bot) sendLoadMoreMessage(message *tgbotapi.Message) {
 		chatID:      message.Chat.ID,
 		text:        "<b>Загрузить больше вариантов</b>",
 		groupName:   message.Chat.Type,
-		replyMarkup: &loadMoreMenuMarkup,
+		replyMarkup: &b.Menu.loadMoreMenuMarkup,
 		parseMode:   tgbotapi.ModeHTML,
 	}
 	b.SendMessage(msg)

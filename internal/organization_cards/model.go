@@ -1,26 +1,26 @@
 package cards
 
 type OrganizationCard struct {
-	Name                   string
-	Structural_subdivision string
-	City                   string
-	Possible_cooperation   string
-	Priority_2030          bool
-	Consortium_membership  bool
-	Software               string
-	Laboratory_and_noc     bool
+	name                   string
+	structural_subdivision string
+	city                   string
+	possible_cooperation   string
+	priority_2030          bool
+	consortium_membership  bool
+	software               string
+	laboratory_and_noc     bool
 }
 
 func (oc *OrganizationCard) ToDomain() OrganizationCard {
 	c := OrganizationCard{
-		Name:                   oc.Name,
-		Structural_subdivision: oc.Structural_subdivision,
-		City:                   oc.City,
-		Possible_cooperation:   oc.Possible_cooperation,
-		Priority_2030:          oc.Priority_2030,
-		Consortium_membership:  oc.Consortium_membership,
-		Software:               oc.Software,
-		Laboratory_and_noc:     oc.Laboratory_and_noc,
+		name:                   oc.name,
+		structural_subdivision: oc.structural_subdivision,
+		city:                   oc.city,
+		possible_cooperation:   oc.possible_cooperation,
+		priority_2030:          oc.priority_2030,
+		consortium_membership:  oc.consortium_membership,
+		software:               oc.software,
+		laboratory_and_noc:     oc.laboratory_and_noc,
 	}
 
 	return c

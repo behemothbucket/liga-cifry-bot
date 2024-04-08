@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"strings"
 	"time"
 )
 
@@ -18,8 +17,4 @@ func DoWithTries(fn func() error, attempts int, delay time.Duration) (err error)
 	}
 
 	return
-}
-
-func formatQuery(q string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(q, "\t", ""), "\n", " ")
 }

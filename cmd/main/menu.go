@@ -4,24 +4,32 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const (
-	mainMenuDescription   = "Выберите вариант поиска"
-	searchMenuDescription = "<b>Выберите критерии поиска</b>"
-)
+type Menu struct {
+	mainMenuDescription   string
+	searchMenuDescription string
+	mainMenuMarkup        tgbotapi.InlineKeyboardMarkup
+	cancelMenuMarkup      tgbotapi.InlineKeyboardMarkup
+	loadMoreMenuMarkup    tgbotapi.InlineKeyboardMarkup
+	backToMainMenuMarkup  tgbotapi.InlineKeyboardMarkup
+}
 
-var (
-	mainMenuMarkup       = getMainMenuMarkup()
-	cancelMenuMarkup     = getCancelMenuMarkup()
-	loadMoreMenuMarkup   = getLoadMoreMenuMarkup()
-	backToMainMenuMarkup = getBackToMainMenuMarkup()
-)
+func initMenu() Menu {
+	return Menu{
+		mainMenuDescription:   "Выберите вариант поиска",
+		searchMenuDescription: "<b>Выберите критерии поиска</b>",
+		mainMenuMarkup:        getMainMenuMarkup(),
+		cancelMenuMarkup:      getCancelMenuMarkup(),
+		loadMoreMenuMarkup:    getLoadMoreMenuMarkup(),
+		backToMainMenuMarkup:  getBackToMainMenuMarkup(),
+	}
+}
 
 func (b *Bot) sendMainMenu(message *tgbotapi.Message) {
 	msg := Message{
 		chatID:      message.Chat.ID,
-		text:        mainMenuDescription,
+		text:        b.Menu.mainMenuDescription,
 		groupName:   message.Chat.Type,
-		replyMarkup: &mainMenuMarkup,
+		replyMarkup: &b.Menu.mainMenuMarkup,
 		parseMode:   tgbotapi.ModeHTML,
 	}
 	b.SendMessage(msg)
