@@ -46,7 +46,6 @@ func NewClient(
 				log.Panicf("Unable to create connection pool: %v\n", err)
 				return err
 			}
-			// defer dbpool.Close()
 
 			return nil
 		}, maxAttempts, 5*time.Second)

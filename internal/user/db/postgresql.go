@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	user "telegram-bot/internal/user"
+	"telegram-bot/internal/user"
 	"telegram-bot/pkg/client/postgresql"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -47,7 +47,6 @@ func (r *repository) JoinGroup(ctx context.Context, u *tgbotapi.User) error {
 	currentTime := r.getCurrentTime()
 
 	if exist {
-		log.Printf("[SQL: JoinGroup] Пользователь с ID %d найден", u.ID)
 		if _, err := r.client.Exec(ctx, `
       UPDATE users
       SET
@@ -57,6 +56,7 @@ func (r *repository) JoinGroup(ctx context.Context, u *tgbotapi.User) error {
     `, true, currentTime, nil, u.ID); err != nil {
 			return err
 		}
+		log.Printf("[SQL: JoinGroup] Пользователь с никнеймом @%s обновил свои данные", u.UserName)
 	} else {
 		if _, err := r.client.Exec(ctx, `
       INSERT INTO users
@@ -89,16 +89,15 @@ func (r *repository) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
       is_joined = $1, date_left = $2
     WHERE
       user_id = $3
-    AND
-      (SELECT COUNT(*) FROM users WHERE user_id = $4) != 0
+
     `
 
 	currentTime := r.getCurrentTime()
-	if _, err := r.client.Exec(ctx, q, false, currentTime, u.ID, u.ID); err != nil {
+	if _, err := r.client.Exec(ctx, q, false, currentTime, u.ID); err != nil {
 		return err
 	}
 
-	log.Printf("Пользователь с никнеймом @%s вышел из группы", u.UserName)
+	log.Printf("Пользователь с никнеймом @%s вышел из группы или был исключен", u.UserName)
 
 	return nil
 }

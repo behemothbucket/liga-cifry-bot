@@ -40,33 +40,12 @@ func handleIfSubscriptionEvent(message *tgbotapi.Message) bool {
 	return event
 }
 
-func logMessage(message *tgbotapi.Message) {
-	userName := message.From.UserName
-	firstName := message.From.FirstName
-	lastName := message.From.LastName
-	userID := message.From.ID
-	text := message.Text
-	chatID := message.Chat.ID
-	var groupName string
-
-	if lastName != "" {
-		lastName = " " + lastName
-	}
-
-	if message.Chat.Title != "" {
-		groupName = message.Chat.Title
-	}
-
-	log.Printf("https://t.me/%s [ID:%d] (%s%s) send message '%s' to chat [chatID:%d, group:%s]",
-		userName, userID, firstName, lastName, text, chatID, groupName)
-}
-
 func (b *Bot) sendAcceptMessage(message *tgbotapi.Message) {
 	msg := Message{
 		chatID:      message.Chat.ID,
 		text:        "<b>Ответ принят</b>\nЯ пока что в разработке...",
 		groupName:   message.Chat.Type,
-		replyMarkup: &b.Menu.cancelMenuMarkup,
+		replyMarkup: &cancelMenuMarkup,
 		parseMode:   tgbotapi.ModeHTML,
 	}
 	b.SendMessage(msg)
@@ -77,7 +56,7 @@ func (b *Bot) sendLoadMoreMessage(message *tgbotapi.Message) {
 		chatID:      message.Chat.ID,
 		text:        "<b>Загрузить больше вариантов</b>",
 		groupName:   message.Chat.Type,
-		replyMarkup: &b.Menu.loadMoreMenuMarkup,
+		replyMarkup: &loadMoreMenuMarkup,
 		parseMode:   tgbotapi.ModeHTML,
 	}
 	b.SendMessage(msg)

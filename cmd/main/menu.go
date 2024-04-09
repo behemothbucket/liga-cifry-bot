@@ -4,44 +4,53 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-type Menu struct {
-	mainMenuDescription   string
-	searchMenuDescription string
-	mainMenuMarkup        tgbotapi.InlineKeyboardMarkup
-	cancelMenuMarkup      tgbotapi.InlineKeyboardMarkup
-	loadMoreMenuMarkup    tgbotapi.InlineKeyboardMarkup
-	backToMainMenuMarkup  tgbotapi.InlineKeyboardMarkup
-}
+const (
+	mainMenuDescription   = "Выберите вариант поиска"
+	searchMenuDescription = "<b>Выберите критерии поиска</b>"
+)
 
-func initMenu() Menu {
-	return Menu{
-		mainMenuDescription:   "Выберите вариант поиска",
-		searchMenuDescription: "<b>Выберите критерии поиска</b>",
-		mainMenuMarkup:        getMainMenuMarkup(),
-		cancelMenuMarkup:      getCancelMenuMarkup(),
-		loadMoreMenuMarkup:    getLoadMoreMenuMarkup(),
-		backToMainMenuMarkup:  getBackToMainMenuMarkup(),
-	}
-}
+var (
+	mainMenuMarkup               = getMainMenuMarkup()
+	searchPersonalCardMenuMarkup = getSearchMenuMarkup("personalCard")
+	searchOrganizationMenuMarkup = getSearchMenuMarkup("organization")
+	cancelMenuMarkup             = getCancelMenuMarkup()
+	loadMoreMenuMarkup           = getLoadMoreMenuMarkup()
+	backToMainMenuMarkup         = getBackToMainMenuMarkup()
+)
 
-func (b *Bot) sendMainMenu(message *tgbotapi.Message) {
+func (b *Bot) SendMainMenu(message *tgbotapi.Message) {
 	msg := Message{
 		chatID:      message.Chat.ID,
-		text:        b.Menu.mainMenuDescription,
+		text:        mainMenuDescription,
 		groupName:   message.Chat.Type,
-		replyMarkup: &b.Menu.mainMenuMarkup,
+		replyMarkup: &mainMenuMarkup,
 		parseMode:   tgbotapi.ModeHTML,
 	}
+	b.SendMessage(msg)
+}
+
+func (b *Bot) SendSearchMenu(message *tgbotapi.Message, markup *tgbotapi.InlineKeyboardMarkup) {
+	msg := Message{
+		chatID:      message.Chat.ID,
+		text:        searchMenuDescription,
+		groupName:   message.Chat.Type,
+		replyMarkup: markup,
+		parseMode:   tgbotapi.ModeHTML,
+	}
+
 	b.SendMessage(msg)
 }
 
 func getMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchUserButton, searchUserButton),
+			tgbotapi.NewInlineKeyboardButtonData(searchPersonalCard, searchPersonalCard),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(searchUniversityButton, searchUniversityButton),
+			tgbotapi.NewInlineKeyboardButtonData(
+				searchOrganizationButton,
+				searchOrganizationButton,
+			),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(printFirstPersonalCard, printFirstPersonalCard),

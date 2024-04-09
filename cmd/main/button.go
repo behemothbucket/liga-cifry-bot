@@ -7,7 +7,7 @@ import (
 
 var (
 	searchButtons = map[string][]string{
-		"user": {
+		"personalCard": {
 			"ФИО",
 			"Город",
 			"Организация",
@@ -15,7 +15,7 @@ var (
 			"Компетенции",
 			"Направления сотрудничества",
 		},
-		"university": {
+		"organization": {
 			"Организация",
 			"Структурное подразделение",
 			"Город",
@@ -28,8 +28,8 @@ var (
 		},
 	}
 
-	searchUserButton           = "🔍 Индивидульные карточки"
-	searchUniversityButton     = "🔍 Карточки организаций"
+	searchPersonalCard         = "🔍 Индивидульные карточки"
+	searchOrganizationButton   = "🔍 Карточки организаций"
 	backButton                 = "⬅️ Назад"
 	menuButton                 = "↩️ Меню"
 	cancelSearchButton         = "❌ Отменить поиск"
@@ -49,18 +49,18 @@ func hasPrefix(button string, prefix string) bool {
 }
 
 func (b *Bot) removeSearchCriterion(criteria string) {
-	if b.currentSearchScreen == "user" {
+	if b.currentSearchScreen == "personalCard" {
 		delete(b.userSearchCriteria, criteria)
 	} else {
-		delete(b.universitySearchCriteria, criteria)
+		delete(b.organizationSearchCriteria, criteria)
 	}
 }
 
 func (b *Bot) addSearchCriterion(criteria string) {
-	if b.currentSearchScreen == "user" {
+	if b.currentSearchScreen == "personalCard" {
 		b.userSearchCriteria[criteria] = criteria
 	} else {
-		b.universitySearchCriteria[criteria] = criteria
+		b.organizationSearchCriteria[criteria] = criteria
 	}
 }
 
@@ -101,8 +101,8 @@ func (b *Bot) resetCriteriaButtons() {
 	for k := range b.userSearchCriteria {
 		delete(b.userSearchCriteria, k)
 	}
-	for k := range b.universitySearchCriteria {
-		delete(b.universitySearchCriteria, k)
+	for k := range b.organizationSearchCriteria {
+		delete(b.organizationSearchCriteria, k)
 	}
 }
 
@@ -120,10 +120,10 @@ func (b *Bot) getCriterion() string {
 	var criterion string
 	var criteria map[string]string
 
-	if b.currentSearchScreen == "user" {
+	if b.currentSearchScreen == "personalCard" {
 		criteria = b.userSearchCriteria
 	} else {
-		criteria = b.universitySearchCriteria
+		criteria = b.organizationSearchCriteria
 	}
 
 	for _, v := range criteria {
