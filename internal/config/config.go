@@ -1,34 +1,47 @@
 package config
 
 import (
-	"log"
-	"sync"
+	"os"
+	"telegram-bot/internal/logger"
 
-	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
-type StorageConfig struct {
-	Port     string `yaml:"port"`
-	Host     string `yaml:"host"`
-	UserName string `yaml:"username"`
-	Password string `yaml:"password"`
-	Database string `yaml:"database"`
+const configFile = "data/config.yml"
+
+type Config struct {
+	Token              string `yaml:"token"`              // Токен бота в телеграме.
+	ConnectionStringDB string `yaml:"ConnectionStringDB"` // Строка подключения в базе данных.
+	MaxAttempts        int    `yaml:"MaxAttempts"`
 }
 
-var (
-	instance *StorageConfig
-	once     sync.Once
-)
+type Service struct {
+	config Config
+}
 
-func GetConfig() *StorageConfig {
-	once.Do(func() {
-		log.Print("read application configuration")
-		instance = &StorageConfig{}
-		if err := cleanenv.ReadConfig("config.yml", instance); err != nil {
-			help, _ := cleanenv.GetDescription(instance, nil)
-			log.Print(help)
-			log.Fatal(err)
-		}
-	})
-	return instance
+func New() (*Service, error) {
+	s := &Service{}
+
+	rawYAML, err := os.ReadFile(configFile)
+	if err != nil {
+		logger.Error("Ошибка reading config file", "err", err)
+		return nil, errors.Wrap(err, "reading config file")
+	}
+
+	err = yaml.Unmarshal(rawYAML, &s.config)
+	if err != nil {
+		logger.Error("Ошибка parsing yaml", "err", err)
+		return nil, errors.Wrap(err, "parsing yaml")
+	}
+
+	return s, nil
+}
+
+func (s *Service) Token() string {
+	return s.config.Token
+}
+
+func (s *Service) GetConfig() Config {
+	return s.config
 }

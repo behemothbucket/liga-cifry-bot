@@ -1,0 +1,4 @@
+---
+token: 6587208797:AAHfjqzK8moFOdhTPUtklCFtV6dRphpiKBc
+ConnectionStringDB: postgresql://postgres:7406@172.22.217.76:5234/liga_cifry
+MaxAttempts: 5
