@@ -2,9 +2,7 @@ package tg
 
 import (
 	"fmt"
-	"strings"
 	"telegram-bot/internal/logger"
-	types "telegram-bot/internal/model/bottypes"
 	"telegram-bot/internal/model/messages"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -38,9 +36,9 @@ func New(tokenGetter TokenGetter, handlerProcessingFunc HandlerFunc) (*Client, e
 	}, nil
 }
 
-func (c *Client) SendMessage(text string, userID int64) error {
-	msg := tgbotapi.NewMessage(userID, text)
-	msg.ParseMode = "markdown"
+func (c *Client) SendMessage(text string, chatID int64) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "HTML"
 	_, err := c.client.Send(msg)
 	if err != nil {
 		return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
@@ -69,66 +67,51 @@ func ProcessingMessages(tgUpdate tgbotapi.Update, c *Client, msgModel *messages.
 		// Пользователь написал текстовое сообщение.
 		logger.Info(
 			fmt.Sprintf(
-				"[%s][%v] %s",
+				"[@%s][%v] %s",
 				tgUpdate.Message.From.UserName,
 				tgUpdate.Message.From.ID,
 				tgUpdate.Message.Text,
 			),
 		)
 		err := msgModel.IncomingMessage(messages.Message{
-			Text:     tgUpdate.Message.Text,
-			UserID:   tgUpdate.Message.From.ID,
-			UserName: tgUpdate.Message.From.UserName,
-			UserDisplayName: strings.TrimSpace(
-				tgUpdate.Message.From.FirstName + " " + tgUpdate.Message.From.LastName,
-			),
+			Text:            tgUpdate.Message.Text,
+			ChatID:          tgUpdate.Message.Chat.ID,
+			FirstName:       tgUpdate.Message.From.FirstName,
+			NewChatMembers:  tgUpdate.Message.NewChatMembers,
+			LeftChatMembers: tgUpdate.Message.LeftChatMember,
 		})
 		if err != nil {
 			logger.Error("error processing message:", "err", err)
 		}
 	} else if tgUpdate.CallbackQuery != nil {
 		// Пользователь нажал кнопку.
-		logger.Info(fmt.Sprintf("[%s][%v] Callback: %s", tgUpdate.CallbackQuery.From.UserName, tgUpdate.CallbackQuery.From.ID, tgUpdate.CallbackQuery.Data))
+		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", tgUpdate.CallbackQuery.From.UserName, tgUpdate.CallbackQuery.From.ID, tgUpdate.CallbackQuery.Data))
 		callback := tgbotapi.NewCallback(tgUpdate.CallbackQuery.ID, tgUpdate.CallbackQuery.Data)
 		if _, err := c.client.Request(callback); err != nil {
 			logger.Error("Ошибка Request callback:", "err", err)
 		}
-		if err := deleteInlineButtons(c, tgUpdate.CallbackQuery.From.ID, tgUpdate.CallbackQuery.Message.MessageID, tgUpdate.CallbackQuery.Message.Text); err != nil {
-			logger.Error("Ошибка удаления кнопок:", "err", err)
-		}
-		err := msgModel.IncomingMessage(messages.Message{
-			Text:            tgUpdate.CallbackQuery.Data,
-			UserID:          tgUpdate.CallbackQuery.From.ID,
-			UserName:        tgUpdate.CallbackQuery.From.UserName,
-			UserDisplayName: strings.TrimSpace(tgUpdate.CallbackQuery.From.FirstName + " " + tgUpdate.CallbackQuery.From.LastName),
-			IsCallback:      true,
-			CallbackMsgID:   tgUpdate.CallbackQuery.InlineMessageID,
+		// if err := deleteInlineButtons(c, tgUpdate.CallbackQuery.From.ID, tgUpdate.CallbackQuery.Message.MessageID, tgUpdate.CallbackQuery.Message.Text); err != nil {
+		// 	logger.Error("Ошибка удаления кнопок:", "err", err)
+		// }
+		err := msgModel.HandleButton(messages.Message{
+			CallbackQuery: tgUpdate.CallbackQuery,
 		})
 		if err != nil {
-			logger.Error("error processing message from callback:", "err", err)
+			logger.Error("error handle button from callback:", "err", err)
 		}
 	}
 }
 
 // ShowInlineButtons Отображение кнопок меню под сообщением с ответом.
 // Их нажатие ожидает коллбек-ответ.
-func (c *Client) ShowInlineButtons(text string, buttons []types.TgRowButtons, userID int64) error {
-	keyboard := make([][]tgbotapi.InlineKeyboardButton, len(buttons))
-	for i := 0; i < len(buttons); i++ {
-		tgRowButtons := buttons[i]
-		keyboard[i] = make([]tgbotapi.InlineKeyboardButton, len(tgRowButtons))
-		for j := 0; j < len(tgRowButtons); j++ {
-			tgInlineButton := tgRowButtons[j]
-			keyboard[i][j] = tgbotapi.NewInlineKeyboardButtonData(
-				tgInlineButton.DisplayName,
-				tgInlineButton.Value,
-			)
-		}
-	}
-	numericKeyboard := tgbotapi.NewInlineKeyboardMarkup(keyboard...)
-	msg := tgbotapi.NewMessage(userID, text)
-	msg.ReplyMarkup = numericKeyboard
-	msg.ParseMode = "markdown"
+func (c *Client) ShowInlineButtons(
+	text string,
+	markup tgbotapi.InlineKeyboardMarkup,
+	chatID int64,
+) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = markup
+	msg.ParseMode = "HTML"
 	_, err := c.client.Send(msg)
 	if err != nil {
 		logger.Error("Ошибка отправки сообщения", "err", err)
@@ -137,8 +120,8 @@ func (c *Client) ShowInlineButtons(text string, buttons []types.TgRowButtons, us
 	return nil
 }
 
-func deleteInlineButtons(c *Client, userID int64, msgID int, sourceText string) error {
-	msg := tgbotapi.NewEditMessageText(userID, msgID, sourceText)
+func deleteInlineButtons(c *Client, chatID int64, msgID int, sourceText string) error {
+	msg := tgbotapi.NewEditMessageText(chatID, msgID, sourceText)
 	_, err := c.client.Send(msg)
 	if err != nil {
 		logger.Error("Ошибка отправки сообщения", "err", err)

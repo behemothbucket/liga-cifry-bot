@@ -4,7 +4,6 @@ package bottypes
 // Кнопка сообщения.
 type TgInlineButton struct {
 	DisplayName string
-	Value       string
 }
 
 // Строка с кнопками сообщения.

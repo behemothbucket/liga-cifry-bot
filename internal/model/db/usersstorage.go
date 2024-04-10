@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
-	"log"
+	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/messages"
 	"time"
 
@@ -13,12 +13,12 @@ import (
 )
 
 type UserStorage struct {
-	pool *pgxpool.Pool
+	db *pgxpool.Pool
 }
 
 func NewUserStorage(pool *pgxpool.Pool) messages.UserDataStorage {
 	return &UserStorage{
-		pool: pool,
+		db: pool,
 	}
 }
 
@@ -29,7 +29,7 @@ func (s *UserStorage) CheckIfUserExist(ctx context.Context, userID int64) (bool,
 
 	// Выполнение запроса на получение данных.
 	var exist bool
-	err := s.pool.QueryRow(ctx, query, userID).Scan(&exist)
+	err := s.db.QueryRow(ctx, query, userID).Scan(&exist)
 	if err != nil {
 		return false, err
 	}
@@ -40,38 +40,39 @@ func (s *UserStorage) CheckIfUserExist(ctx context.Context, userID int64) (bool,
 // JoinGroup Добавление пользователя в базу данных.
 func (s *UserStorage) JoinGroup(
 	ctx context.Context,
-	id int64,
-	userName string,
-	firstName string,
-	lastName string,
-	isBot bool,
+	u *tgbotapi.User,
 ) error {
-	exist, err := s.CheckIfUserExist(ctx, id)
+	exist, err := s.CheckIfUserExist(ctx, u.ID)
 	if err != nil {
 		return err
 	}
 
 	if exist {
-		if _, err := s.pool.Exec(ctx, `
+		if _, err := s.db.Exec(ctx, `
       UPDATE users
       SET
         is_joined = $1, date_joined = $2, date_left = $3
       WHERE
         user_id = $4
-    `, true, time.Now(), nil, id); err != nil {
+    `, true, time.Now(), nil, u.ID); err != nil {
 			return err
 		}
-		log.Printf("[SQL: JoinGroup] Пользователь с никнеймом @%s обновил свои данные", userName)
+		logger.Info(
+			fmt.Sprintf(
+				"[SQL: JoinGroup] Пользователь с никнеймом @%s обновил свои данные",
+				u.UserName,
+			),
+		)
 	} else {
-		if _, err := s.pool.Exec(ctx, `
+		if _, err := s.db.Exec(ctx, `
       INSERT INTO users
         (user_id, user_name, first_name, last_name, is_bot, is_joined, date_joined, date_left)
       VALUES
         ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, id, userName, firstName, lastName, isBot, true, time.Now(), nil); err != nil {
+    `, u.ID, u.UserName, u.FirstName, u.LastName, u.IsBot, true, time.Now(), nil); err != nil {
 			return err
 		}
-		log.Printf("Пользователь с никнеймом @%s присоединился к группе", userName)
+		logger.Info(fmt.Sprintf("Пользователь с никнеймом @%s присоединился к группе", u.UserName))
 	}
 
 	return nil
@@ -84,7 +85,7 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	}
 
 	if !exist {
-		log.Printf("[SQL: LeaveGroup] Пользователь с ID %d не найден", u.ID)
+		logger.Info(fmt.Sprintf("[SQL: LeaveGroup] Пользователь с ID %d не найден", u.ID))
 		return nil
 	}
 
@@ -97,11 +98,13 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 
     `
 
-	if _, err := s.pool.Exec(ctx, q, false, time.Now(), u.ID); err != nil {
+	if _, err := s.db.Exec(ctx, q, false, time.Now(), u.ID); err != nil {
 		return err
 	}
 
-	log.Printf("Пользователь с никнеймом @%s вышел из группы или был исключен", u.UserName)
+	logger.Info(
+		fmt.Sprintf("Пользователь с никнеймом @%s вышел из группы или был исключен", u.UserName),
+	)
 
 	return nil
 }
@@ -110,10 +113,12 @@ func (s *UserStorage) ShowAllPersonalCards(
 	ctx context.Context,
 ) (pc []messages.PersonalCard, err error) {
 	q := `SELECT * FROM public.personal_cards;`
-	rows, err := s.pool.Query(ctx, q)
+
+	rows, err := s.db.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[messages.PersonalCard])
 	if err != nil {
