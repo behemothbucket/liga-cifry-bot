@@ -1,17 +1,18 @@
 package tg
 
 import (
+	"context"
 	"fmt"
 	"telegram-bot/internal/logger"
-	"telegram-bot/internal/model/messages"
+	"telegram-bot/internal/model/dialog"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
 )
 
-type HandlerFunc func(tgUpdate tgbotapi.Update, c *Client, msgModel *messages.Model)
+type HandlerFunc func(tgUpdate tgbotapi.Update, c *Client, msgModel *dialog.Model)
 
-func (f HandlerFunc) RunFunc(tgUpdate tgbotapi.Update, c *Client, msgModel *messages.Model) {
+func (f HandlerFunc) RunFunc(tgUpdate tgbotapi.Update, c *Client, msgModel *dialog.Model) {
 	f(tgUpdate, c, msgModel)
 }
 
@@ -38,7 +39,7 @@ func New(tokenGetter TokenGetter, handlerProcessingFunc HandlerFunc) (*Client, e
 
 func (c *Client) SendMessage(text string, chatID int64) error {
 	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = "HTML"
+	msg.ParseMode = "MarkdownV2"
 	_, err := c.client.Send(msg)
 	if err != nil {
 		return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
@@ -46,55 +47,85 @@ func (c *Client) SendMessage(text string, chatID int64) error {
 	return nil
 }
 
-func (c *Client) ListenUpdates(msgModel *messages.Model) {
+func (c *Client) SendMessageWithMarkup(
+	text string,
+	chatID int64,
+	markup tgbotapi.InlineKeyboardMarkup,
+) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "MarkdownV2"
+	msg.ReplyMarkup = markup
+	_, err := c.client.Send(msg)
+	if err != nil {
+		return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
+	}
+	return nil
+}
+
+func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
 	updates := c.client.GetUpdatesChan(u)
 
-	logger.Info("Start listening for tg messages")
+	logger.Info("Start listening for tg dialog")
 
-	for update := range updates {
-		// Функция обработки сообщений (обернутая в middleware).
-		c.handlerProcessingFunc.RunFunc(update, c, msgModel)
-		// вместо ProcessingMessages(update, c, msgModel)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case update := <-updates:
+			// logger.Debug(fmt.Sprintf("%v", update))
+			c.handlerProcessingFunc.RunFunc(update, c, msgModel)
+		}
 	}
+
+	// for update := range updates {
+	// 	// Функция обработки сообщений (обернутая в middleware).
+	// 	c.handlerProcessingFunc.RunFunc(update, c, msgModel)
+	// 	// вместо ProcessingMessages(update, c, msgModel)
+	// }
 }
 
 // ProcessingMessages функция обработки сообщений.
-func ProcessingMessages(tgUpdate tgbotapi.Update, c *Client, msgModel *messages.Model) {
-	if tgUpdate.Message != nil {
+func ProcessingMessages(update tgbotapi.Update, c *Client, msgModel *dialog.Model) {
+	if update.Message != nil {
 		// Пользователь написал текстовое сообщение.
 		logger.Info(
 			fmt.Sprintf(
 				"[@%s][%v] %s",
-				tgUpdate.Message.From.UserName,
-				tgUpdate.Message.From.ID,
-				tgUpdate.Message.Text,
+				update.Message.From.UserName,
+				update.Message.From.ID,
+				update.Message.Text,
 			),
 		)
-		err := msgModel.IncomingMessage(messages.Message{
-			Text:            tgUpdate.Message.Text,
-			ChatID:          tgUpdate.Message.Chat.ID,
-			FirstName:       tgUpdate.Message.From.FirstName,
-			NewChatMembers:  tgUpdate.Message.NewChatMembers,
-			LeftChatMembers: tgUpdate.Message.LeftChatMember,
+
+		err := msgModel.HandleMessage(dialog.Message{
+			Text:            update.Message.Text,
+			ChatID:          update.Message.Chat.ID,
+			MsgID:           update.Message.MessageID,
+			FirstName:       update.Message.From.FirstName,
+			NewChatMembers:  update.Message.NewChatMembers,
+			LeftChatMembers: update.Message.LeftChatMember,
 		})
 		if err != nil {
 			logger.Error("error processing message:", "err", err)
 		}
-	} else if tgUpdate.CallbackQuery != nil {
+	} else if update.CallbackQuery != nil {
 		// Пользователь нажал кнопку.
-		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", tgUpdate.CallbackQuery.From.UserName, tgUpdate.CallbackQuery.From.ID, tgUpdate.CallbackQuery.Data))
-		callback := tgbotapi.NewCallback(tgUpdate.CallbackQuery.ID, tgUpdate.CallbackQuery.Data)
+		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", update.CallbackQuery.From.UserName, update.CallbackQuery.From.ID, update.CallbackQuery.Data))
+
+		// Text if not specified, nothing will be shown to the user
+		callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "")
+
 		if _, err := c.client.Request(callback); err != nil {
 			logger.Error("Ошибка Request callback:", "err", err)
 		}
-		// if err := deleteInlineButtons(c, tgUpdate.CallbackQuery.From.ID, tgUpdate.CallbackQuery.Message.MessageID, tgUpdate.CallbackQuery.Message.Text); err != nil {
-		// 	logger.Error("Ошибка удаления кнопок:", "err", err)
-		// }
-		err := msgModel.HandleButton(messages.Message{
-			CallbackQuery: tgUpdate.CallbackQuery,
+
+		err := msgModel.HandleButton(dialog.Message{
+			ChatID:        update.CallbackQuery.Message.Chat.ID,
+			MsgID:         update.CallbackQuery.Message.MessageID,
+			CallbackQuery: update.CallbackQuery,
 		})
 		if err != nil {
 			logger.Error("error handle button from callback:", "err", err)
@@ -105,27 +136,17 @@ func ProcessingMessages(tgUpdate tgbotapi.Update, c *Client, msgModel *messages.
 // ShowInlineButtons Отображение кнопок меню под сообщением с ответом.
 // Их нажатие ожидает коллбек-ответ.
 func (c *Client) ShowInlineButtons(
+	chatID int64,
+	msgID int,
 	text string,
 	markup tgbotapi.InlineKeyboardMarkup,
-	chatID int64,
 ) error {
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = markup
-	msg.ParseMode = "HTML"
+	msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, markup)
+	msg.ParseMode = "MarkdownV2"
 	_, err := c.client.Send(msg)
 	if err != nil {
 		logger.Error("Ошибка отправки сообщения", "err", err)
 		return errors.Wrap(err, "client.Send with inline-buttons")
-	}
-	return nil
-}
-
-func deleteInlineButtons(c *Client, chatID int64, msgID int, sourceText string) error {
-	msg := tgbotapi.NewEditMessageText(chatID, msgID, sourceText)
-	_, err := c.client.Send(msg)
-	if err != nil {
-		logger.Error("Ошибка отправки сообщения", "err", err)
-		return errors.Wrap(err, "client.Send remove inline-buttons")
 	}
 	return nil
 }

@@ -8,12 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const configFile = "data/config.yml"
+const configFile = "data/config.yaml"
 
 type Config struct {
 	Token              string `yaml:"token"`              // Токен бота в телеграме.
 	ConnectionStringDB string `yaml:"ConnectionStringDB"` // Строка подключения в базе данных.
-	MaxAttempts        int    `yaml:"MaxAttempts"`
 }
 
 type Service struct {

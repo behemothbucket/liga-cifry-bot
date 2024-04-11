@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"telegram-bot/internal/logger"
-	"telegram-bot/internal/model/messages"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,10 +14,18 @@ type UserStorage struct {
 	db *pgxpool.Pool
 }
 
-func NewUserStorage(pool *pgxpool.Pool) messages.UserDataStorage {
+func NewUserStorage(pool *pgxpool.Pool) UserDataStorage {
 	return &UserStorage{
 		db: pool,
 	}
+}
+
+// UserDataStorage Интерфейс для работы с хранилищем данных.
+type UserDataStorage interface {
+	JoinGroup(ctx context.Context, u *tgbotapi.User) error
+	LeaveGroup(ctx context.Context, u *tgbotapi.User) error
+	CheckIfUserExist(ctx context.Context, userID int64) (bool, error)
+	FindCard(ctx context.Context, criteria string, date string) (string, error)
 }
 
 // CheckIfUserExist Проверка существования пользователя в базе данных.
@@ -94,8 +100,7 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
     SET
       is_joined = $1, date_left = $2
     WHERE
-      user_id = $3
-
+      user_id = $3;
     `
 
 	if _, err := s.db.Exec(ctx, q, false, time.Now(), u.ID); err != nil {
@@ -109,22 +114,37 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	return nil
 }
 
-func (s *UserStorage) ShowAllPersonalCards(
-	ctx context.Context,
-) (pc []messages.PersonalCard, err error) {
-	q := `SELECT * FROM public.personal_cards;`
+func (s *UserStorage) FindCard(ctx context.Context, criteria string, data string) (string, error) {
+	query := `SELECT * FROM personal_cards WHERE fio ILIKE '\%$1\%';`
 
-	rows, err := s.db.Query(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	logger.Debug(query)
+	var card string
 
-	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[messages.PersonalCard])
+	err := s.db.QueryRow(ctx, query, data).Scan(&card)
 	if err != nil {
-		fmt.Printf("CollectRows error: %v", err)
-		return
+		return "", err
 	}
 
-	return cards, nil
+	logger.Debug(card)
+	return card, nil
 }
+
+// func (s *UserStorage) ShowAllPersonalCards(
+// 	ctx context.Context,
+// ) (pc []dialog.PersonalCard, err error) {
+// 	q := `SELECT * FROM public.personal_cards;`
+//
+// 	rows, err := s.db.Query(ctx, q)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer rows.Close()
+//
+// 	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[dialog.PersonalCard])
+// 	if err != nil {
+// 		fmt.Printf("CollectRows error: %v", err)
+// 		return
+// 	}
+//
+// 	return cards, nil
+// }

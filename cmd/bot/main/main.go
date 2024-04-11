@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"os"
 	"telegram-bot/internal/clients/tg"
 	"telegram-bot/internal/config"
 	"telegram-bot/internal/helpers/dbutils"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/db"
-	"telegram-bot/internal/model/messages"
+	dialog "telegram-bot/internal/model/dialog"
+	"telegram-bot/internal/model/search"
 )
 
 // Параметры по умолчанию (могут быть изменены через config)
@@ -19,6 +22,7 @@ func main() {
 	logger.Info("Старт приложения")
 
 	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
 
 	config, err := config.New()
 	if err != nil {
@@ -51,11 +55,19 @@ func main() {
 	// БД информации пользователей.
 	userStorage := db.NewUserStorage(pool)
 
-	msgModel := messages.New(ctx, tgClient, userStorage)
+	// Механизм поиска.
+	searchEngine := search.Init()
+
+	msgModel := dialog.New(ctx, tgClient, userStorage, searchEngine)
 
 	// Запуск ТГ-клиента.
-	tgClient.ListenUpdates(msgModel)
+	go tgClient.ListenUpdates(ctx, msgModel)
 
+	_, err = bufio.NewReader(os.Stdin).ReadBytes('\n')
+	if err != nil {
+		logger.Error("Ошибка в завершении работы приложения")
+	}
+	cancel()
 	logger.Info("Завершение приложения")
 }
 
