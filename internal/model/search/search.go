@@ -1,18 +1,21 @@
 package search
 
 type Search struct {
-	mode             string
+	searchScreen     string
 	chosenCriterions []string
+	inEnabled        bool
 }
 
 // SearchEngine Интерфейс для работы с поиском карточек.
 type SearchEngine interface {
 	AddCriterion(criterion string)
 	RemoveCriterion(criterion string)
-	ResetCriterions()
-	GetMode() string
-	SetMode(searchType string)
+	ResetSearchCriterions()
+	GetSearchScreen() string
+	SetSearchScreen(searchScreen string)
 	Disable()
+	Enable()
+	IsEnabled() bool
 	GetCriterions() []string
 }
 
@@ -21,19 +24,28 @@ func Init() SearchEngine {
 }
 
 // Get Получить текущий экран поиска
-func (s *Search) GetMode() string {
-	return s.mode
+func (s *Search) GetSearchScreen() string {
+	return s.searchScreen
 }
 
 // Set Назначить текущий экран поиска
-func (s *Search) SetMode(mode string) {
-	s.mode = mode
+func (s *Search) SetSearchScreen(screen string) {
+	s.searchScreen = screen
+}
+
+func (s *Search) IsEnabled() bool {
+	return s.inEnabled
 }
 
 // Disable Выключить режим поиска.
 func (s *Search) Disable() {
-	s.mode = ""
-	s.ResetCriterions()
+	s.ResetSearchCriterions()
+	s.inEnabled = false
+}
+
+// Включить режим поиска
+func (s *Search) Enable() {
+	s.inEnabled = true
 }
 
 func (s *Search) AddCriterion(criterion string) {
@@ -53,6 +65,6 @@ func (s *Search) GetCriterions() []string {
 	return s.chosenCriterions
 }
 
-func (s *Search) ResetCriterions() {
+func (s *Search) ResetSearchCriterions() {
 	s.chosenCriterions = nil
 }

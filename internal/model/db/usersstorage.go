@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"telegram-bot/internal/logger"
+	"telegram-bot/internal/model/card/person"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -25,7 +26,7 @@ type UserDataStorage interface {
 	JoinGroup(ctx context.Context, u *tgbotapi.User) error
 	LeaveGroup(ctx context.Context, u *tgbotapi.User) error
 	CheckIfUserExist(ctx context.Context, userID int64) (bool, error)
-	FindCard(ctx context.Context, criteria string, date string) (string, error)
+	FindCard(ctx context.Context, criteria string, date string) (person.PersonCard, error)
 }
 
 // CheckIfUserExist Проверка существования пользователя в базе данных.
@@ -114,18 +115,28 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	return nil
 }
 
-func (s *UserStorage) FindCard(ctx context.Context, criteria string, data string) (string, error) {
-	query := `SELECT * FROM personal_cards WHERE fio ILIKE '\%$1\%';`
+func (s *UserStorage) FindCard(
+	ctx context.Context,
+	criteria string,
+	data string,
+) (person.PersonCard, error) {
+	query := `SELECT * FROM personal_cards WHERE fio ILIKE $1`
 
-	logger.Debug(query)
-	var card string
+	var card person.PersonCard
 
-	err := s.db.QueryRow(ctx, query, data).Scan(&card)
+	err := s.db.QueryRow(ctx, query, "%"+data+"%").Scan(
+		&card.Fio,
+		&card.City,
+		&card.Organization,
+		&card.Job_title,
+		&card.Expert_competencies,
+		&card.Possible_cooperation,
+		&card.Contacts,
+	)
 	if err != nil {
-		return "", err
+		return person.PersonCard{Fio: ""}, err
 	}
 
-	logger.Debug(card)
 	return card, nil
 }
 

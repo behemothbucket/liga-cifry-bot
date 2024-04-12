@@ -3,6 +3,7 @@ package tg
 import (
 	"context"
 	"fmt"
+	"telegram-bot/internal/helpers/markdown"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/dialog"
 
@@ -38,6 +39,7 @@ func New(tokenGetter TokenGetter, handlerProcessingFunc HandlerFunc) (*Client, e
 }
 
 func (c *Client) SendMessage(text string, chatID int64) error {
+	text = markdown.EscapeForMarkdown(text)
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "MarkdownV2"
 	_, err := c.client.Send(msg)
@@ -50,8 +52,9 @@ func (c *Client) SendMessage(text string, chatID int64) error {
 func (c *Client) SendMessageWithMarkup(
 	text string,
 	chatID int64,
-	markup tgbotapi.InlineKeyboardMarkup,
+	markup *tgbotapi.InlineKeyboardMarkup,
 ) error {
+	text = markdown.EscapeForMarkdown(text)
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "MarkdownV2"
 	msg.ReplyMarkup = markup
@@ -70,20 +73,22 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	logger.Info("Start listening for tg dialog")
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case update := <-updates:
-			// logger.Debug(fmt.Sprintf("%v", update))
-			c.handlerProcessingFunc.RunFunc(update, c, msgModel)
-		}
+	for update := range updates {
+		// Функция обработки сообщений (обернутая в middleware).
+		// NOTE зачем нам middleware?
+		c.handlerProcessingFunc.RunFunc(update, c, msgModel)
+		// вместо ProcessingMessages(update, c, msgModel)
 	}
 
-	// for update := range updates {
-	// 	// Функция обработки сообщений (обернутая в middleware).
-	// 	c.handlerProcessingFunc.RunFunc(update, c, msgModel)
-	// 	// вместо ProcessingMessages(update, c, msgModel)
+	// NOTE как это работает?
+	// for {
+	// 	select {
+	// 	case <-ctx.Done():
+	// 		return
+	// 	case update := <-updates:
+	// 		// logger.Debug(fmt.Sprintf("%v", update))
+	// 		c.handlerProcessingFunc.RunFunc(update, c, msgModel)
+	// 	}
 	// }
 }
 
@@ -112,6 +117,7 @@ func ProcessingMessages(update tgbotapi.Update, c *Client, msgModel *dialog.Mode
 			logger.Error("error processing message:", "err", err)
 		}
 	} else if update.CallbackQuery != nil {
+
 		// Пользователь нажал кнопку.
 		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", update.CallbackQuery.From.UserName, update.CallbackQuery.From.ID, update.CallbackQuery.Data))
 
@@ -126,6 +132,10 @@ func ProcessingMessages(update tgbotapi.Update, c *Client, msgModel *dialog.Mode
 			ChatID:        update.CallbackQuery.Message.Chat.ID,
 			MsgID:         update.CallbackQuery.Message.MessageID,
 			CallbackQuery: update.CallbackQuery,
+			Data:          update.CallbackQuery.Data,
+			FirstName:     update.CallbackQuery.From.FirstName,
+			Text:          update.CallbackQuery.Message.Text,
+			Markup:        update.CallbackQuery.Message.ReplyMarkup,
 		})
 		if err != nil {
 			logger.Error("error handle button from callback:", "err", err)
@@ -133,20 +143,65 @@ func ProcessingMessages(update tgbotapi.Update, c *Client, msgModel *dialog.Mode
 	}
 }
 
-// ShowInlineButtons Отображение кнопок меню под сообщением с ответом.
-// Их нажатие ожидает коллбек-ответ.
-func (c *Client) ShowInlineButtons(
-	chatID int64,
-	msgID int,
+// isDuplicateEdit Проверка на действия, которые не приведут к изменениям
+func isDuplicateEdit(
+	msg dialog.Message,
 	text string,
-	markup tgbotapi.InlineKeyboardMarkup,
+	markup *tgbotapi.InlineKeyboardMarkup,
+	onlyMarkup bool,
+) bool {
+	oldText := msg.Text
+	oldMarkup := msg.Markup
+
+	if onlyMarkup {
+		if markup == oldMarkup {
+			return true
+		}
+	} else {
+		if (markup == oldMarkup) && (text == oldText) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ReplaceTextAndMarkup замена текста и инлайн-кнопок.
+// Их нажатие ожидает коллбек-ответ.
+func (c *Client) EditTextAndMarkup(
+	msg dialog.Message,
+	text string,
+	markup *tgbotapi.InlineKeyboardMarkup,
 ) error {
-	msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, markup)
-	msg.ParseMode = "MarkdownV2"
-	_, err := c.client.Send(msg)
-	if err != nil {
-		logger.Error("Ошибка отправки сообщения", "err", err)
-		return errors.Wrap(err, "client.Send with inline-buttons")
+	if !isDuplicateEdit(msg, text, markup, false) {
+		chatID := msg.ChatID
+		msgID := msg.MsgID
+		text = markdown.EscapeForMarkdown(text)
+
+		logger.Debug(fmt.Sprintf("%v", markup))
+		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, *markup)
+		msg.ParseMode = "MarkdownV2"
+		_, err := c.client.Send(msg)
+		if err != nil {
+			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "err", err)
+			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
+		}
+		return nil
+	}
+	return nil
+}
+
+func (c *Client) EditMarkup(msg dialog.Message, markup *tgbotapi.InlineKeyboardMarkup) error {
+	if !isDuplicateEdit(msg, "", markup, true) {
+		chatID := msg.ChatID
+		msgID := msg.MsgID
+
+		_msg := tgbotapi.NewEditMessageReplyMarkup(chatID, msgID, *markup)
+		_, err := c.client.Send(_msg)
+		if err != nil {
+			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "err", err)
+			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
+		}
 	}
 	return nil
 }

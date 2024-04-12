@@ -27,7 +27,6 @@ var (
 			"Компетенции",
 		},
 	}
-
 	btnSearchPerson       = "🔍 Поиск индивидуальных карточек"
 	btnSearchOrganization = "🔍 Поиск карточек организаций"
 	btnBack               = "⬅️ Назад"
@@ -39,43 +38,35 @@ var (
 	btnChosenPrefix = "☑️ "
 )
 
-func IsCriterionButton(button string, mode string) string {
-	for _, v := range btnsCriterions[mode] {
-		if button == v {
-			return button
+func HandleCriterionButton(button string, se search.SearchEngine) string {
+	searcScreen := se.GetSearchScreen()
+	buttons := btnsCriterions[searcScreen]
+
+	for i, expected := range buttons {
+		if button == expected {
+			if strings.HasPrefix(buttons[i], btnChosenPrefix) {
+				uncheckedButton := strings.TrimPrefix(
+					buttons[i],
+					btnChosenPrefix,
+				)
+				buttons[i] = uncheckedButton
+				se.RemoveCriterion(uncheckedButton)
+			} else {
+				buttons[i] = btnChosenPrefix + button
+				se.AddCriterion(button)
+			}
 		}
 	}
 
-	return ""
+	return button
 }
 
-func findButtonIndex(buttons []string, targetButton string) int {
-	for i, button := range buttons {
-		if button == targetButton {
-			return i
+func ResetCriteriaButtons() {
+	for _, searchScreen := range btnsCriterions {
+		for i, btn := range searchScreen {
+			if strings.HasPrefix(btn, btnChosenPrefix) {
+				searchScreen[i] = strings.TrimPrefix(btn, btnChosenPrefix)
+			}
 		}
 	}
-	return -1
-}
-
-func toggleCriterionButton(button string, se search.SearchEngine) {
-	mode := se.GetMode()
-	buttons := btnsCriterions[mode]
-	index := findButtonIndex(buttons, button)
-
-	if hasPrefix(buttons[index], btnChosenPrefix) {
-		uncheckedButton := strings.TrimPrefix(
-			buttons[index],
-			btnChosenPrefix,
-		)
-		buttons[index] = uncheckedButton
-		se.RemoveCriterion(uncheckedButton)
-	} else {
-		buttons[index] = btnChosenPrefix + button
-		se.AddCriterion(button)
-	}
-}
-
-func hasPrefix(button string, prefix string) bool {
-	return strings.Contains(button, prefix)
 }

@@ -8,6 +8,7 @@ var (
 	markupMainMenu               = CreateMainMenuMarkup()
 	markupSearchPersonMenu       = CreateSearchMenuMarkup("person")
 	markupSearchOrganizationMenu = CreateSearchMenuMarkup("organization")
+	markupCancelMenu             = CreateCancelMenuMarkup()
 )
 
 func CreateMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {

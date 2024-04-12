@@ -3,8 +3,8 @@ package dialog
 import (
 	"context"
 	"fmt"
-	"telegram-bot/internal/helpers/markup"
-	"telegram-bot/internal/logger"
+	"telegram-bot/internal/model/card/person"
+	"time"
 
 	db "telegram-bot/internal/model/db"
 	search "telegram-bot/internal/model/search"
@@ -16,23 +16,13 @@ import (
 // Область "Константы и переменные": начало.
 
 var (
-	txtMainMenu = markup.EscapeForMarkdown(
-		"Привет, %v.\nМогу помочь найти карточку компетенций или организации.",
-	)
-	txtUnknownCommand = markup.EscapeForMarkdown(
-		"К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start",
-	)
+	txtMainMenu       = "Привет, %v.\nМогу помочь найти карточку компетенций или организации."
+	txtUnknownCommand = "К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start"
 	// txtReportError     = "Не удалось получить данные."
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
-	txtCriterionChoose = markup.EscapeForMarkdown(
-		"Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅.",
-	)
-	txtNoCriteria = markup.EscapeForMarkdown(
-		"❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий.",
-	)
-	txtCriteriaInput = markup.EscapeForMarkdown(
-		"Пожалуйста, введите *%v*.",
-	)
+	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
+	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
+	txtCriteriaInput   = "Пожалуйста, введите *%v*."
 )
 
 // Область "Константы и переменные": конец.
@@ -42,13 +32,14 @@ var (
 // MessageSender Интерфейс для работы с сообщениями.
 type MessageSender interface {
 	SendMessage(text string, chatID int64) error
-	SendMessageWithMarkup(text string, chatID int64, markup tgbotapi.InlineKeyboardMarkup) error
-	ShowInlineButtons(
-		chatID int64,
-		msgID int,
-		text string,
-		markup tgbotapi.InlineKeyboardMarkup,
+	SendMessageWithMarkup(text string, chatID int64, markup *tgbotapi.InlineKeyboardMarkup) error
+	EditTextAndMarkup(
+		msg Message,
+		newText string,
+		newMarkup *tgbotapi.InlineKeyboardMarkup,
 	) error
+	EditMarkup(msg Message, markup *tgbotapi.InlineKeyboardMarkup) error
+	// EditText(chatID int64, msgID int, text string) error
 }
 
 // Model Модель бота (клиент, хранилище, поиск)
@@ -77,6 +68,7 @@ func New(
 // Message Структура сообщения для обработки.
 type Message struct {
 	Text            string
+	Data            string
 	MsgID           int
 	ChatID          int64
 	UserID          int64
@@ -84,6 +76,7 @@ type Message struct {
 	CallbackQuery   *tgbotapi.CallbackQuery
 	NewChatMembers  []tgbotapi.User
 	LeftChatMembers *tgbotapi.User
+	Markup          *tgbotapi.InlineKeyboardMarkup
 }
 
 func (m *Model) GetCtx() context.Context {
@@ -96,12 +89,11 @@ func (m *Model) SetCtx(ctx context.Context) {
 
 // HandleMessage Обработка входящего сообщения.
 func (m *Model) HandleMessage(msg Message) error {
-	span, ctx := opentracing.StartSpanFromContext(m.ctx, "IncomingMessage")
-	m.ctx = ctx
-	defer span.Finish()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	// Распознавание стандартных команд.
-	if isNeedReturn, err := checkBotCommands(m, msg); err != nil || isNeedReturn {
+	if isNeedReturn, err := CheckBotCommands(m, msg); err != nil || isNeedReturn {
 		return err
 	}
 
@@ -116,13 +108,8 @@ func (m *Model) HandleMessage(msg Message) error {
 	}
 
 	// Режим поиска
-	if m.search.GetMode() != "" {
-		card, _ := m.storage.FindCard(ctx, m.search.GetCriterions()[0], msg.Text)
-		logger.Debug(card)
-		// return m.tgClient.SendMessage(
-		// 	card,
-		// 	msg.ChatID,
-		// )
+	if m.search.IsEnabled() {
+		return m.ProcessSearch(ctx, msg)
 	}
 
 	// Отправка ответа по умолчанию.
@@ -130,7 +117,7 @@ func (m *Model) HandleMessage(msg Message) error {
 }
 
 // Распознавание стандартных команд бота.
-func checkBotCommands(m *Model, msg Message) (bool, error) {
+func CheckBotCommands(m *Model, msg Message) (bool, error) {
 	span, ctx := opentracing.StartSpanFromContext(m.ctx, "checkBotCommands")
 	m.ctx = ctx
 	defer span.Finish()
@@ -138,84 +125,92 @@ func checkBotCommands(m *Model, msg Message) (bool, error) {
 	switch msg.Text {
 	case "/start":
 		m.search.Disable()
-		displayName := msg.FirstName
-		if len(displayName) == 0 {
-			displayName = msg.FirstName
-		}
 		// Отображение команд стартовых действий.
 		return true, m.tgClient.SendMessageWithMarkup(
-			fmt.Sprintf(txtMainMenu, displayName),
+			fmt.Sprintf(txtMainMenu, msg.FirstName),
 			msg.ChatID,
-			markupMainMenu,
+			&markupMainMenu,
 		)
 	}
 	// Команда не распознана.
 	return false, nil
 }
 
-func (m *Model) HandleButton(msg Message) error {
-	span, ctx := opentracing.StartSpanFromContext(m.ctx, "HandleButton")
-	m.ctx = ctx
-	defer span.Finish()
+func (m *Model) ProcessSearch(ctx context.Context, msg Message) error {
+	rawCard, err := m.storage.FindCard(ctx, m.search.GetCriterions()[0], msg.Text)
+	if err != nil {
+		return err
+	}
 
+	card := person.MarkupCard(&rawCard)
+
+	return m.tgClient.SendMessage(
+		card,
+		msg.ChatID,
+	)
+}
+
+func (m *Model) HandleButton(msg Message) error {
 	button := msg.CallbackQuery.Data
-	mode := m.search.GetMode()
+	searchScreen := m.search.GetSearchScreen()
+	firstName := msg.CallbackQuery.From.FirstName
+	previousMarkup := msg.CallbackQuery.Message.ReplyMarkup
 
 	switch button {
 	case btnBack:
 		m.search.Disable()
-		displayName := msg.CallbackQuery.From.FirstName
-		return m.tgClient.ShowInlineButtons(
-			msg.ChatID,
-			msg.MsgID,
-			fmt.Sprintf(txtMainMenu, displayName),
-			markupMainMenu,
+		ResetCriteriaButtons()
+		return m.tgClient.EditTextAndMarkup(
+			msg,
+			fmt.Sprintf(txtMainMenu, firstName),
+			&markupMainMenu,
 		)
 	case btnSearchPerson:
-		m.search.SetMode("person")
-		return m.tgClient.ShowInlineButtons(
-			msg.ChatID,
-			msg.MsgID,
+		m.search.SetSearchScreen("person")
+		return m.tgClient.EditTextAndMarkup(
+			msg,
 			txtCriterionChoose,
-			markupSearchPersonMenu,
+			&markupSearchPersonMenu,
 		)
 	case btnSearchOrganization:
-		m.search.SetMode("organization")
-		return m.tgClient.ShowInlineButtons(
-			msg.ChatID,
-			msg.MsgID,
+		m.search.SetSearchScreen("organization")
+		return m.tgClient.EditTextAndMarkup(
+			msg,
 			txtCriterionChoose,
-			markupSearchOrganizationMenu,
+			&markupSearchOrganizationMenu,
 		)
 	case btnApply:
+		m.search.Enable()
 		lenCriterions := len(m.search.GetCriterions())
 		if lenCriterions == 0 {
-			markup := CreateSearchMenuMarkup(mode)
-			return m.tgClient.ShowInlineButtons(
-				msg.ChatID,
-				msg.MsgID,
+			return m.tgClient.EditTextAndMarkup(
+				msg,
 				txtNoCriteria,
-				markup,
+				previousMarkup,
 			)
+			// TEST
 		} else if lenCriterions == 1 {
-			markup := CreateCancelMenuMarkup()
-			return m.tgClient.ShowInlineButtons(
-				msg.ChatID,
-				msg.MsgID,
+			markup := markupCancelMenu
+			return m.tgClient.EditTextAndMarkup(
+				msg,
 				fmt.Sprintf(txtCriteriaInput, m.search.GetCriterions()[0]),
-				markup,
+				&markup,
 			)
 		}
-	case IsCriterionButton(button, mode):
-		toggleCriterionButton(button, m.search)
-		logger.Debug(fmt.Sprintf("%v", m.search.GetCriterions()))
-		// NOTE можно ли по ссылке менять?
-		markup := CreateSearchMenuMarkup(mode)
-		return m.tgClient.ShowInlineButtons(
+	case btnCancelSearch:
+		m.search.Disable()
+		m.search.ResetSearchCriterions()
+		ResetCriteriaButtons()
+		return m.tgClient.SendMessageWithMarkup(
+			fmt.Sprintf(txtMainMenu, firstName),
 			msg.ChatID,
-			msg.MsgID,
-			txtCriterionChoose,
-			markup,
+			&markupMainMenu,
+		)
+	case HandleCriterionButton(button, m.search):
+		markup := CreateSearchMenuMarkup(searchScreen)
+		return m.tgClient.EditMarkup(
+			msg,
+			&markup,
 		)
 	}
 

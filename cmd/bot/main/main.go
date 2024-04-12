@@ -33,6 +33,7 @@ func main() {
 	setConfigSettings(config.GetConfig())
 
 	// Оборачивание в Middleware функции обработки сообщения
+	// NOTE зачем?
 	tgProcessingFuncHandler := tg.HandlerFunc(tg.ProcessingMessages)
 
 	// Инициализация телеграм клиента.
