@@ -3,14 +3,12 @@ package dialog
 import (
 	"context"
 	"fmt"
-	"telegram-bot/internal/model/card/person"
+	"telegram-bot/internal/logger"
+	"telegram-bot/internal/model/db"
+	"telegram-bot/internal/model/search"
 	"time"
 
-	db "telegram-bot/internal/model/db"
-	search "telegram-bot/internal/model/search"
-
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/opentracing/opentracing-go"
 )
 
 // Область "Константы и переменные": начало.
@@ -33,21 +31,21 @@ var (
 type MessageSender interface {
 	SendMessage(text string, chatID int64) error
 	SendMessageWithMarkup(text string, chatID int64, markup *tgbotapi.InlineKeyboardMarkup) error
+	SendCards(cards []string, chatID int64) error
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
 		newMarkup *tgbotapi.InlineKeyboardMarkup,
 	) error
 	EditMarkup(msg Message, markup *tgbotapi.InlineKeyboardMarkup) error
-	// EditText(chatID int64, msgID int, text string) error
 }
 
 // Model Модель бота (клиент, хранилище, поиск)
 type Model struct {
 	ctx      context.Context
-	tgClient MessageSender       // Клиент.
-	storage  db.UserDataStorage  // Хранилище пользовательской информации.
-	search   search.SearchEngine // Поиск.
+	tgClient MessageSender      // Клиент.
+	storage  db.UserDataStorage // Хранилище пользовательской информации.
+	search   search.Engine      // Поиск.
 }
 
 // New Генерация сущности для хранения клиента ТГ и хранилища пользователей и параметров поиска.
@@ -55,7 +53,7 @@ func New(
 	ctx context.Context,
 	tgClient MessageSender,
 	storage db.UserDataStorage,
-	searchEngine search.SearchEngine,
+	searchEngine search.Engine,
 ) *Model {
 	return &Model{
 		ctx:      ctx,
@@ -72,6 +70,7 @@ type Message struct {
 	MsgID           int
 	ChatID          int64
 	UserID          int64
+	BotName         string
 	FirstName       string
 	CallbackQuery   *tgbotapi.CallbackQuery
 	NewChatMembers  []tgbotapi.User
@@ -93,7 +92,7 @@ func (m *Model) HandleMessage(msg Message) error {
 	defer cancel()
 
 	// Распознавание стандартных команд.
-	if isNeedReturn, err := CheckBotCommands(m, msg); err != nil || isNeedReturn {
+	if isNeedReturn, err := CheckBotCommands(ctx, m, msg); err != nil || isNeedReturn {
 		return err
 	}
 
@@ -109,77 +108,72 @@ func (m *Model) HandleMessage(msg Message) error {
 
 	// Режим поиска
 	if m.search.IsEnabled() {
-		return m.ProcessSearch(ctx, msg)
+		cards, err := m.search.ProcessCards(ctx, m.storage)
+		if err != nil {
+			logger.Error("Ошибка в поиске карты", "err", err)
+		}
+		err = m.tgClient.SendCards(cards, msg.ChatID)
+		if err != nil {
+			logger.Error("Ошибка в отправке карт", "err", err)
+		}
 	}
 
 	// Отправка ответа по умолчанию.
 	return m.tgClient.SendMessage(txtUnknownCommand, msg.ChatID)
 }
 
-// Распознавание стандартных команд бота.
-func CheckBotCommands(m *Model, msg Message) (bool, error) {
-	span, ctx := opentracing.StartSpanFromContext(m.ctx, "checkBotCommands")
-	m.ctx = ctx
-	defer span.Finish()
-
+// CheckBotCommands распознавание стандартных команд бота.
+func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) {
 	switch msg.Text {
-	case "/start":
-		m.search.Disable()
-		// Отображение команд стартовых действий.
+	case "/start", fmt.Sprintf("/start@" + msg.BotName):
+		if m.search.IsEnabled() {
+			m.search.Disable()
+		}
 		return true, m.tgClient.SendMessageWithMarkup(
 			fmt.Sprintf(txtMainMenu, msg.FirstName),
 			msg.ChatID,
-			&markupMainMenu,
+			&MarkupMainMenu,
 		)
+	case "/allpersonalcards":
+		rawCards, err := m.storage.ShowAllPersonalCards(ctx)
+		if err != nil {
+			logger.Error("Ошибка в сборе всех персональных карточек", "err", err)
+		}
+		cards := m.search.FormatCards(rawCards)
+		return true, m.tgClient.SendCards(cards, msg.ChatID)
 	}
-	// Команда не распознана.
 	return false, nil
-}
-
-func (m *Model) ProcessSearch(ctx context.Context, msg Message) error {
-	rawCard, err := m.storage.FindCard(ctx, m.search.GetCriterions()[0], msg.Text)
-	if err != nil {
-		return err
-	}
-
-	card := person.MarkupCard(&rawCard)
-
-	return m.tgClient.SendMessage(
-		card,
-		msg.ChatID,
-	)
 }
 
 func (m *Model) HandleButton(msg Message) error {
 	button := msg.CallbackQuery.Data
-	searchScreen := m.search.GetSearchScreen()
 	firstName := msg.CallbackQuery.From.FirstName
 	previousMarkup := msg.CallbackQuery.Message.ReplyMarkup
 
 	switch button {
-	case btnBack:
+	case BtnBack:
 		m.search.Disable()
 		ResetCriteriaButtons()
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			fmt.Sprintf(txtMainMenu, firstName),
-			&markupMainMenu,
+			&MarkupMainMenu,
 		)
-	case btnSearchPerson:
+	case BtnSearchPerson:
 		m.search.SetSearchScreen("person")
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			txtCriterionChoose,
-			&markupSearchPersonMenu,
+			&MarkupSearchPersonMenu,
 		)
-	case btnSearchOrganization:
+	case BtnSearchOrganization:
 		m.search.SetSearchScreen("organization")
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			txtCriterionChoose,
-			&markupSearchOrganizationMenu,
+			&MarkupSearchOrganizationMenu,
 		)
-	case btnApply:
+	case BtnApply:
 		m.search.Enable()
 		lenCriterions := len(m.search.GetCriterions())
 		if lenCriterions == 0 {
@@ -190,23 +184,24 @@ func (m *Model) HandleButton(msg Message) error {
 			)
 			// TEST
 		} else if lenCriterions == 1 {
-			markup := markupCancelMenu
+			markup := MarkupCancelMenu
 			return m.tgClient.EditTextAndMarkup(
 				msg,
 				fmt.Sprintf(txtCriteriaInput, m.search.GetCriterions()[0]),
 				&markup,
 			)
 		}
-	case btnCancelSearch:
+	case BtnCancelSearch:
 		m.search.Disable()
-		m.search.ResetSearchCriterions()
+		m.search.ResetSearchCriterias()
 		ResetCriteriaButtons()
 		return m.tgClient.SendMessageWithMarkup(
 			fmt.Sprintf(txtMainMenu, firstName),
 			msg.ChatID,
-			&markupMainMenu,
+			&MarkupMainMenu,
 		)
 	case HandleCriterionButton(button, m.search):
+		searchScreen := m.search.GetSearchScreen()
 		markup := CreateSearchMenuMarkup(searchScreen)
 		return m.tgClient.EditMarkup(
 			msg,

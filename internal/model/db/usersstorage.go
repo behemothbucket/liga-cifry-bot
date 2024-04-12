@@ -2,12 +2,15 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/card/person"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -26,7 +29,8 @@ type UserDataStorage interface {
 	JoinGroup(ctx context.Context, u *tgbotapi.User) error
 	LeaveGroup(ctx context.Context, u *tgbotapi.User) error
 	CheckIfUserExist(ctx context.Context, userID int64) (bool, error)
-	FindCard(ctx context.Context, criteria string, date string) (person.PersonCard, error)
+	FindCards(ctx context.Context, criteria string, crterions []string) ([]person.PersonCard, error)
+	ShowAllPersonalCards(ctx context.Context) (pc []person.PersonCard, err error)
 }
 
 // CheckIfUserExist Проверка существования пользователя в базе данных.
@@ -115,47 +119,69 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	return nil
 }
 
-func (s *UserStorage) FindCard(
+func (s *UserStorage) FindCards(
 	ctx context.Context,
 	criteria string,
-	data string,
-) (person.PersonCard, error) {
-	query := `SELECT * FROM personal_cards WHERE fio ILIKE $1`
+	criterions []string,
+) ([]person.PersonCard, error) {
+	query := "SELECT * FROM personal_cards WHERE fio ILIKE $1"
 
-	var card person.PersonCard
-
-	err := s.db.QueryRow(ctx, query, "%"+data+"%").Scan(
-		&card.Fio,
-		&card.City,
-		&card.Organization,
-		&card.Job_title,
-		&card.Expert_competencies,
-		&card.Possible_cooperation,
-		&card.Contacts,
-	)
-	if err != nil {
-		return person.PersonCard{Fio: ""}, err
+	for i := range criterions {
+		query += fmt.Sprintf(" AND %s ILIKE $%d", criteria, i+2)
 	}
 
-	return card, nil
+	rows, err := s.db.Query(ctx, query, "%"+criterions[0]+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cards []person.PersonCard
+
+	for rows.Next() {
+		var card person.PersonCard
+		err := rows.Scan(
+			&card.ID,
+			&card.Fio,
+			&card.City,
+			&card.Organization,
+			&card.JobTitle,
+			&card.ExpertCompetencies,
+			&card.PossibleCooperation,
+			&card.Contacts,
+		)
+		if err != nil {
+			return nil, err
+		}
+		cards = append(cards, card)
+	}
+
+	if err := rows.Err(); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("no rows found")
+		}
+		return nil, err
+	}
+
+	return cards, nil
 }
 
-// func (s *UserStorage) ShowAllPersonalCards(
-// 	ctx context.Context,
-// ) (pc []dialog.PersonalCard, err error) {
-// 	q := `SELECT * FROM public.personal_cards;`
-//
-// 	rows, err := s.db.Query(ctx, q)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer rows.Close()
-//
-// 	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[dialog.PersonalCard])
-// 	if err != nil {
-// 		fmt.Printf("CollectRows error: %v", err)
-// 		return
-// 	}
-//
-// 	return cards, nil
-// }
+func (s *UserStorage) ShowAllPersonalCards(
+	ctx context.Context,
+) (pc []person.PersonCard, err error) {
+	q := `SELECT * FROM public.personal_cards;`
+
+	rows, err := s.db.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[person.PersonCard])
+	if err != nil {
+		fmt.Printf("CollectRows error: %v", err)
+		return
+	}
+
+	return cards, nil
+}

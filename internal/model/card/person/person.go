@@ -2,18 +2,17 @@ package person
 
 import (
 	"fmt"
-	"telegram-bot/internal/helpers/markdown"
 )
 
 type PersonCard struct {
-	ID                   string
-	Fio                  string
-	City                 string
-	Organization         string
-	Job_title            string
-	Expert_competencies  string
-	Possible_cooperation string
-	Contacts             string
+	ID                  string
+	Fio                 string
+	City                string
+	Organization        string
+	JobTitle            string
+	ExpertCompetencies  string
+	PossibleCooperation string
+	Contacts            string
 }
 
 const personCardTemplate = `
@@ -38,16 +37,16 @@ const personCardTemplate = `
 📱*Контакты для связи*
 %s`
 
-func MarkupCard(card *PersonCard) string {
-	formattedText := fmt.Sprintf(personCardTemplate,
+func ToDomain(card *PersonCard) string {
+	domainCard := fmt.Sprintf(personCardTemplate,
 		card.Fio,
 		card.City,
 		card.Organization,
-		card.Job_title,
-		card.Expert_competencies,
-		card.Possible_cooperation,
+		card.JobTitle,
+		card.ExpertCompetencies,
+		card.PossibleCooperation,
 		card.Contacts,
 	)
 
-	return markdown.EscapeForMarkdown(formattedText)
+	return domainCard
 }

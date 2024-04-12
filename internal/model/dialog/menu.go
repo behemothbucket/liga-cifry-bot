@@ -5,27 +5,27 @@ import (
 )
 
 var (
-	markupMainMenu               = CreateMainMenuMarkup()
-	markupSearchPersonMenu       = CreateSearchMenuMarkup("person")
-	markupSearchOrganizationMenu = CreateSearchMenuMarkup("organization")
-	markupCancelMenu             = CreateCancelMenuMarkup()
+	MarkupMainMenu               = CreateMainMenuMarkup()
+	MarkupSearchPersonMenu       = CreateSearchMenuMarkup("person")
+	MarkupSearchOrganizationMenu = CreateSearchMenuMarkup("organization")
+	MarkupCancelMenu             = CreateCancelMenuMarkup()
 )
 
 func CreateMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(btnSearchPerson, btnSearchPerson),
+			tgbotapi.NewInlineKeyboardButtonData(BtnSearchPerson, BtnSearchPerson),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(btnSearchOrganization, btnSearchOrganization),
+			tgbotapi.NewInlineKeyboardButtonData(BtnSearchOrganization, BtnSearchOrganization),
 		),
 	)
 }
 
-func CreateSearchMenuMarkup(mode string) tgbotapi.InlineKeyboardMarkup {
+func CreateSearchMenuMarkup(searchScreen string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 
-	for _, btn := range btnsCriterions[mode] {
+	for _, btn := range BtnCriterions[searchScreen] {
 		row := tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(btn, btn),
 		)
@@ -33,8 +33,8 @@ func CreateSearchMenuMarkup(mode string) tgbotapi.InlineKeyboardMarkup {
 	}
 
 	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData(btnBack, btnBack),
-		tgbotapi.NewInlineKeyboardButtonData(btnApply, btnApply),
+		tgbotapi.NewInlineKeyboardButtonData(BtnBack, BtnBack),
+		tgbotapi.NewInlineKeyboardButtonData(BtnApply, BtnApply),
 	})
 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -43,7 +43,7 @@ func CreateSearchMenuMarkup(mode string) tgbotapi.InlineKeyboardMarkup {
 func CreateCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(btnCancelSearch, btnCancelSearch),
+			tgbotapi.NewInlineKeyboardButtonData(BtnCancelSearch, BtnCancelSearch),
 		),
 	)
 }

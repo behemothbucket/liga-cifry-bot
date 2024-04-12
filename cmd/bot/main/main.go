@@ -9,7 +9,7 @@ import (
 	"telegram-bot/internal/helpers/dbutils"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/db"
-	dialog "telegram-bot/internal/model/dialog"
+	"telegram-bot/internal/model/dialog"
 	"telegram-bot/internal/model/search"
 )
 
@@ -24,20 +24,20 @@ func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
-	config, err := config.New()
+	dbConfig, err := config.New()
 	if err != nil {
 		logger.Fatal("Ошибка получения файла конфигурации:", "err", err)
 	}
 
 	// Изменение параметров по умолчанию из заданной конфигурации.
-	setConfigSettings(config.GetConfig())
+	setConfigSettings(dbConfig.GetConfig())
 
 	// Оборачивание в Middleware функции обработки сообщения
 	// NOTE зачем?
 	tgProcessingFuncHandler := tg.HandlerFunc(tg.ProcessingMessages)
 
 	// Инициализация телеграм клиента.
-	tgClient, err := tg.New(config, tgProcessingFuncHandler)
+	tgClient, err := tg.New(dbConfig, tgProcessingFuncHandler)
 	if err != nil {
 		logger.Fatal("Ошибка инициализации ТГ-клиента:", "err", err)
 	}

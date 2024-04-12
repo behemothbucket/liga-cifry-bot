@@ -7,7 +7,7 @@ import (
 
 // Кнопки.
 var (
-	btnsCriterions = map[string][]string{
+	BtnCriterions = map[string][]string{
 		"person": {
 			"ФИО",
 			"Город",
@@ -27,20 +27,20 @@ var (
 			"Компетенции",
 		},
 	}
-	btnSearchPerson       = "🔍 Поиск индивидуальных карточек"
-	btnSearchOrganization = "🔍 Поиск карточек организаций"
-	btnBack               = "⬅️ Назад"
+	BtnSearchPerson       = "🔍 Поиск индивидуальных карточек"
+	BtnSearchOrganization = "🔍 Поиск карточек организаций"
+	BtnBack               = "⬅️ Назад"
 	// btnMenu               = "↩️ Меню"
-	btnCancelSearch = "❌ Отменить поиск"
-	btnApply        = "✅ Применить"
+	BtnCancelSearch = "❌ Отменить поиск"
+	BtnApply        = "✅ Применить"
 	// btnSearch             = "🔍 Искать"
 	// btnLoadMore           = "⏬ Загрузить еще 5"
 	btnChosenPrefix = "☑️ "
 )
 
-func HandleCriterionButton(button string, se search.SearchEngine) string {
-	searcScreen := se.GetSearchScreen()
-	buttons := btnsCriterions[searcScreen]
+func HandleCriterionButton(button string, se search.Engine) string {
+	searchScreen := se.GetSearchScreen()
+	buttons := BtnCriterions[searchScreen]
 
 	for i, expected := range buttons {
 		if button == expected {
@@ -53,7 +53,7 @@ func HandleCriterionButton(button string, se search.SearchEngine) string {
 				se.RemoveCriterion(uncheckedButton)
 			} else {
 				buttons[i] = btnChosenPrefix + button
-				se.AddCriterion(button)
+				se.AddCriterion(buttons[i])
 			}
 		}
 	}
@@ -62,7 +62,7 @@ func HandleCriterionButton(button string, se search.SearchEngine) string {
 }
 
 func ResetCriteriaButtons() {
-	for _, searchScreen := range btnsCriterions {
+	for _, searchScreen := range BtnCriterions {
 		for i, btn := range searchScreen {
 			if strings.HasPrefix(btn, btnChosenPrefix) {
 				searchScreen[i] = strings.TrimPrefix(btn, btnChosenPrefix)

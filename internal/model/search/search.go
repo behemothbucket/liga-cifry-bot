@@ -1,51 +1,81 @@
 package search
 
+import (
+	"context"
+	"telegram-bot/internal/model/card/person"
+	"telegram-bot/internal/model/db"
+)
+
 type Search struct {
 	searchScreen     string
 	chosenCriterions []string
-	inEnabled        bool
+	isEnabled        bool
 }
 
-// SearchEngine Интерфейс для работы с поиском карточек.
-type SearchEngine interface {
+// Engine Интерфейс для работы с поиском карточек.
+type Engine interface {
 	AddCriterion(criterion string)
 	RemoveCriterion(criterion string)
-	ResetSearchCriterions()
+	ResetSearchCriterias()
 	GetSearchScreen() string
 	SetSearchScreen(searchScreen string)
 	Disable()
 	Enable()
 	IsEnabled() bool
+	FormatCards(cards []person.PersonCard) []string
+	ProcessCards(ctx context.Context, storage db.UserDataStorage) ([]string, error)
 	GetCriterions() []string
 }
 
-func Init() SearchEngine {
-	return &Search{}
+func Init() Engine {
+	return &Search{
+		isEnabled: false,
+	}
 }
 
-// Get Получить текущий экран поиска
+func (s *Search) ProcessCards(ctx context.Context, storage db.UserDataStorage) ([]string, error) {
+	rawCards, err := storage.FindCards(ctx, s.GetCriterions()[0], s.chosenCriterions)
+	if err != nil {
+		return make([]string, 0), err
+	}
+
+	return s.FormatCards(rawCards), nil
+}
+
+func (s *Search) FormatCards(cards []person.PersonCard) []string {
+	var domainCards []string
+
+	for _, card := range cards {
+		domainCard := person.ToDomain(&card)
+		domainCards = append(domainCards, domainCard)
+	}
+
+	return domainCards
+}
+
+// GetSearchScreen Get Получить текущий экран поиска
 func (s *Search) GetSearchScreen() string {
 	return s.searchScreen
 }
 
-// Set Назначить текущий экран поиска
+// SetSearchScreen Set Назначить текущий экран поиска
 func (s *Search) SetSearchScreen(screen string) {
 	s.searchScreen = screen
 }
 
 func (s *Search) IsEnabled() bool {
-	return s.inEnabled
+	return s.isEnabled
 }
 
 // Disable Выключить режим поиска.
 func (s *Search) Disable() {
-	s.ResetSearchCriterions()
-	s.inEnabled = false
+	s.ResetSearchCriterias()
+	s.isEnabled = false
 }
 
-// Включить режим поиска
+// Enable Включить режим поиска
 func (s *Search) Enable() {
-	s.inEnabled = true
+	s.isEnabled = true
 }
 
 func (s *Search) AddCriterion(criterion string) {
@@ -65,6 +95,6 @@ func (s *Search) GetCriterions() []string {
 	return s.chosenCriterions
 }
 
-func (s *Search) ResetSearchCriterions() {
+func (s *Search) ResetSearchCriterias() {
 	s.chosenCriterions = nil
 }

@@ -65,6 +65,15 @@ func (c *Client) SendMessageWithMarkup(
 	return nil
 }
 
+func (c *Client) SendCards(cards []string, chatID int64) error {
+	for _, card := range cards {
+		if err := c.SendMessage(card, chatID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -86,7 +95,6 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 	// 	case <-ctx.Done():
 	// 		return
 	// 	case update := <-updates:
-	// 		// logger.Debug(fmt.Sprintf("%v", update))
 	// 		c.handlerProcessingFunc.RunFunc(update, c, msgModel)
 	// 	}
 	// }
@@ -109,6 +117,7 @@ func ProcessingMessages(update tgbotapi.Update, c *Client, msgModel *dialog.Mode
 			Text:            update.Message.Text,
 			ChatID:          update.Message.Chat.ID,
 			MsgID:           update.Message.MessageID,
+			BotName:         c.client.Self.UserName,
 			FirstName:       update.Message.From.FirstName,
 			NewChatMembers:  update.Message.NewChatMembers,
 			LeftChatMembers: update.Message.LeftChatMember,
@@ -166,7 +175,7 @@ func isDuplicateEdit(
 	return false
 }
 
-// ReplaceTextAndMarkup замена текста и инлайн-кнопок.
+// EditTextAndMarkup замена текста и инлайн-кнопок.
 // Их нажатие ожидает коллбек-ответ.
 func (c *Client) EditTextAndMarkup(
 	msg dialog.Message,
@@ -178,7 +187,6 @@ func (c *Client) EditTextAndMarkup(
 		msgID := msg.MsgID
 		text = markdown.EscapeForMarkdown(text)
 
-		logger.Debug(fmt.Sprintf("%v", markup))
 		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, *markup)
 		msg.ParseMode = "MarkdownV2"
 		_, err := c.client.Send(msg)
