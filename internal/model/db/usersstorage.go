@@ -29,7 +29,12 @@ type UserDataStorage interface {
 	JoinGroup(ctx context.Context, u *tgbotapi.User) error
 	LeaveGroup(ctx context.Context, u *tgbotapi.User) error
 	CheckIfUserExist(ctx context.Context, userID int64) (bool, error)
-	FindCards(ctx context.Context, criteria string, crterions []string) ([]person.PersonCard, error)
+	FindCards(
+		ctx context.Context,
+		table string,
+		data []string,
+		crterions []string,
+	) ([]person.PersonCard, error)
 	ShowAllPersonalCards(ctx context.Context) (pc []person.PersonCard, err error)
 }
 
@@ -121,16 +126,27 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 
 func (s *UserStorage) FindCards(
 	ctx context.Context,
-	criteria string,
+	table string,
+	data []string,
 	criterions []string,
 ) ([]person.PersonCard, error) {
-	query := "SELECT * FROM personal_cards WHERE fio ILIKE $1"
-
-	for i := range criterions {
-		query += fmt.Sprintf(" AND %s ILIKE $%d", criteria, i+2)
+	if len(criterions) == 0 {
+		return nil, errors.New("at least one criterion is required")
 	}
 
-	rows, err := s.db.Query(ctx, query, "%"+criterions[0]+"%")
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s ILIKE $1", table, criterions[0])
+
+	for i := range data {
+		query += fmt.Sprintf(" AND %s ILIKE $%d", data[i], i+2)
+	}
+
+	args := make([]interface{}, len(criterions)+1)
+	args[0] = "%" + criterions[0] + "%"
+	for i := range criterions {
+		args[i+1] = "%" + criterions[i] + "%"
+	}
+
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

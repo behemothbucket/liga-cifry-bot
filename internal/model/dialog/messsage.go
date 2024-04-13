@@ -108,7 +108,9 @@ func (m *Model) HandleMessage(msg Message) error {
 
 	// Режим поиска
 	if m.search.IsEnabled() {
-		cards, err := m.search.ProcessCards(ctx, m.storage)
+		// TEST
+		data := []string{msg.Text}
+		cards, err := m.search.ProcessCards(ctx, data, m.storage)
 		if err != nil {
 			logger.Error("Ошибка в поиске карты", "err", err)
 		}
@@ -160,14 +162,14 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupMainMenu,
 		)
 	case BtnSearchPerson:
-		m.search.SetSearchScreen("person")
+		m.search.SetSearchScreen("person_cards")
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			txtCriterionChoose,
 			&MarkupSearchPersonMenu,
 		)
 	case BtnSearchOrganization:
-		m.search.SetSearchScreen("organization")
+		m.search.SetSearchScreen("organization_cards")
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			txtCriterionChoose,
@@ -184,11 +186,10 @@ func (m *Model) HandleButton(msg Message) error {
 			)
 			// TEST
 		} else if lenCriterions == 1 {
-			markup := MarkupCancelMenu
 			return m.tgClient.EditTextAndMarkup(
 				msg,
 				fmt.Sprintf(txtCriteriaInput, m.search.GetCriterions()[0]),
-				&markup,
+				&MarkupCancelMenu,
 			)
 		}
 	case BtnCancelSearch:

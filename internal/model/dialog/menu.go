@@ -25,9 +25,9 @@ func CreateMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 func CreateSearchMenuMarkup(searchScreen string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 
-	for _, btn := range BtnCriterions[searchScreen] {
+	for key, value := range BtnCriterions[searchScreen] {
 		row := tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(btn, btn),
+			tgbotapi.NewInlineKeyboardButtonData(key, value[0]),
 		)
 		rows = append(rows, row)
 	}

@@ -11,30 +11,22 @@ import (
 	"github.com/pkg/errors"
 )
 
-type HandlerFunc func(tgUpdate tgbotapi.Update, c *Client, msgModel *dialog.Model)
-
-func (f HandlerFunc) RunFunc(tgUpdate tgbotapi.Update, c *Client, msgModel *dialog.Model) {
-	f(tgUpdate, c, msgModel)
-}
-
 type Client struct {
-	client                *tgbotapi.BotAPI
-	handlerProcessingFunc HandlerFunc // Функция обработки входящих сообщений.
+	client *tgbotapi.BotAPI
 }
 
 type TokenGetter interface {
 	Token() string
 }
 
-func New(tokenGetter TokenGetter, handlerProcessingFunc HandlerFunc) (*Client, error) {
+func New(tokenGetter TokenGetter) (*Client, error) {
 	client, err := tgbotapi.NewBotAPI(tokenGetter.Token())
 	if err != nil {
 		return nil, errors.Wrap(err, "Ошибка NewBotAPI")
 	}
 
 	return &Client{
-		client:                client,
-		handlerProcessingFunc: handlerProcessingFunc,
+		client: client,
 	}, nil
 }
 
@@ -83,10 +75,7 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 	logger.Info("Start listening for tg dialog")
 
 	for update := range updates {
-		// Функция обработки сообщений (обернутая в middleware).
-		// NOTE зачем нам middleware?
-		c.handlerProcessingFunc.RunFunc(update, c, msgModel)
-		// вместо ProcessingMessages(update, c, msgModel)
+		ProcessingMessages(update, c, msgModel)
 	}
 
 	// NOTE как это работает?

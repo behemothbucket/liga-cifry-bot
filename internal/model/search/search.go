@@ -23,7 +23,7 @@ type Engine interface {
 	Enable()
 	IsEnabled() bool
 	FormatCards(cards []person.PersonCard) []string
-	ProcessCards(ctx context.Context, storage db.UserDataStorage) ([]string, error)
+	ProcessCards(ctx context.Context, data []string, storage db.UserDataStorage) ([]string, error)
 	GetCriterions() []string
 }
 
@@ -33,8 +33,13 @@ func Init() Engine {
 	}
 }
 
-func (s *Search) ProcessCards(ctx context.Context, storage db.UserDataStorage) ([]string, error) {
-	rawCards, err := storage.FindCards(ctx, s.GetCriterions()[0], s.chosenCriterions)
+func (s *Search) ProcessCards(
+	ctx context.Context,
+	data []string,
+	storage db.UserDataStorage,
+) ([]string, error) {
+	// TODO передавать введенные пользователем данные
+	rawCards, err := storage.FindCards(ctx, s.GetSearchScreen(), data, s.GetCriterions())
 	if err != nil {
 		return make([]string, 0), err
 	}
