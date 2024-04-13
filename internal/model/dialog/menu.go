@@ -6,8 +6,8 @@ import (
 
 var (
 	MarkupMainMenu               = CreateMainMenuMarkup()
-	MarkupSearchPersonMenu       = CreateSearchMenuMarkup("person")
-	MarkupSearchOrganizationMenu = CreateSearchMenuMarkup("organization")
+	MarkupSearchPersonMenu       = CreateSearchMenuMarkup("personal_cards")
+	MarkupSearchOrganizationMenu = CreateSearchMenuMarkup("organization_cards")
 	MarkupCancelMenu             = CreateCancelMenuMarkup()
 )
 
@@ -25,9 +25,9 @@ func CreateMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 func CreateSearchMenuMarkup(searchScreen string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 
-	for key, value := range BtnCriterions[searchScreen] {
+	for _, btn := range BtnCriterions[searchScreen] {
 		row := tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(key, value[0]),
+			tgbotapi.NewInlineKeyboardButtonData(btn[0], btn[1]),
 		)
 		rows = append(rows, row)
 	}

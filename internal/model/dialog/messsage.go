@@ -20,7 +20,7 @@ var (
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
 	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
-	txtCriteriaInput   = "Пожалуйста, введите *%v*."
+	txtCriteriaInput   = "Пожалуйста, введите ☑️ *%v*."
 )
 
 // Область "Константы и переменные": конец.
@@ -114,10 +114,7 @@ func (m *Model) HandleMessage(msg Message) error {
 		if err != nil {
 			logger.Error("Ошибка в поиске карты", "err", err)
 		}
-		err = m.tgClient.SendCards(cards, msg.ChatID)
-		if err != nil {
-			logger.Error("Ошибка в отправке карт", "err", err)
-		}
+		return m.tgClient.SendCards(cards, msg.ChatID)
 	}
 
 	// Отправка ответа по умолчанию.
@@ -162,7 +159,7 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupMainMenu,
 		)
 	case BtnSearchPerson:
-		m.search.SetSearchScreen("person_cards")
+		m.search.SetSearchScreen("personal_cards")
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			txtCriterionChoose,
@@ -176,7 +173,6 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupSearchOrganizationMenu,
 		)
 	case BtnApply:
-		m.search.Enable()
 		lenCriterions := len(m.search.GetCriterions())
 		if lenCriterions == 0 {
 			return m.tgClient.EditTextAndMarkup(
@@ -186,6 +182,7 @@ func (m *Model) HandleButton(msg Message) error {
 			)
 			// TEST
 		} else if lenCriterions == 1 {
+			m.search.Enable()
 			return m.tgClient.EditTextAndMarkup(
 				msg,
 				fmt.Sprintf(txtCriteriaInput, m.search.GetCriterions()[0]),
@@ -194,7 +191,6 @@ func (m *Model) HandleButton(msg Message) error {
 		}
 	case BtnCancelSearch:
 		m.search.Disable()
-		m.search.ResetSearchCriterias()
 		ResetCriteriaButtons()
 		return m.tgClient.SendMessageWithMarkup(
 			fmt.Sprintf(txtMainMenu, firstName),
@@ -202,12 +198,13 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupMainMenu,
 		)
 	case HandleCriterionButton(button, m.search):
-		searchScreen := m.search.GetSearchScreen()
-		markup := CreateSearchMenuMarkup(searchScreen)
-		return m.tgClient.EditMarkup(
-			msg,
-			&markup,
-		)
+		// searchScreen := m.search.GetSearchScreen()
+		// markup := CreateSearchMenuMarkup(searchScreen)
+		// logger.Debug("%v", markup.InlineKeyboard)
+		// return m.tgClient.EditMarkup(
+		// 	msg,
+		// 	&markup,
+		// )
 	}
 
 	return nil
