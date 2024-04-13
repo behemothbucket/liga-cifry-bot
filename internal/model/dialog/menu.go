@@ -9,6 +9,7 @@ var (
 	MarkupSearchPersonMenu       = CreateSearchMenuMarkup("personal_cards")
 	MarkupSearchOrganizationMenu = CreateSearchMenuMarkup("organization_cards")
 	MarkupCancelMenu             = CreateCancelMenuMarkup()
+	MarkupCardMenu               = CreateCardMenuMarkup()
 )
 
 func CreateMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
@@ -44,6 +45,14 @@ func CreateCancelMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(BtnCancelSearch, BtnCancelSearch),
+		),
+	)
+}
+
+func CreateCardMenuMarkup() tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(BtnMenu, BtnMenu),
 		),
 	)
 }

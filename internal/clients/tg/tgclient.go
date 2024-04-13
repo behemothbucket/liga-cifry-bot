@@ -59,9 +59,16 @@ func (c *Client) SendMessageWithMarkup(
 }
 
 func (c *Client) SendCards(cards []string, chatID int64) error {
-	for _, card := range cards {
-		if err := c.SendMessage(card, chatID); err != nil {
-			return err
+	totalCards := len(cards) - 1
+	for i, card := range cards {
+		if i == totalCards {
+			if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
+				return err
+			}
+		} else {
+			if err := c.SendMessage(card, chatID); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -2,29 +2,32 @@ package search
 
 import (
 	"context"
-	"telegram-bot/internal/model/card/person"
+	card "telegram-bot/internal/model/card"
 	"telegram-bot/internal/model/db"
 )
 
 type Search struct {
 	searchScreen     string
 	chosenCriterions []string
+	searchData       []string
 	isEnabled        bool
 }
 
 // Engine Интерфейс для работы с поиском карточек.
 type Engine interface {
 	AddCriterion(criterion string)
+	AddSearchData(data string)
 	RemoveCriterion(criterion string)
-	ResetSearchCriterias()
+	ResetCriterias()
+	ResetSearchData()
 	GetSearchScreen() string
 	SetSearchScreen(searchScreen string)
-	Disable()
-	Enable()
-	IsEnabled() bool
-	FormatCards(cards []person.PersonCard) []string
-	ProcessCards(ctx context.Context, data []string, storage db.UserDataStorage) ([]string, error)
 	GetCriterions() []string
+	GetSearchData() []string
+	IsEnabled() bool
+	Enable()
+	Disable()
+	ProcessCards(ctx context.Context, storage db.UserDataStorage) ([]string, error)
 }
 
 func Init() Engine {
@@ -35,27 +38,20 @@ func Init() Engine {
 
 func (s *Search) ProcessCards(
 	ctx context.Context,
-	data []string,
 	storage db.UserDataStorage,
 ) ([]string, error) {
 	// TODO передавать введенные пользователем данные
-	rawCards, err := storage.FindCards(ctx, s.GetSearchScreen(), data, s.GetCriterions())
+	rawCards, err := storage.FindCards(
+		ctx,
+		s.GetSearchScreen(),
+		s.GetSearchData(),
+		s.GetCriterions(),
+	)
 	if err != nil {
 		return make([]string, 0), err
 	}
 
-	return s.FormatCards(rawCards), nil
-}
-
-func (s *Search) FormatCards(cards []person.PersonCard) []string {
-	var domainCards []string
-
-	for _, card := range cards {
-		domainCard := person.ToDomain(&card)
-		domainCards = append(domainCards, domainCard)
-	}
-
-	return domainCards
+	return card.FormatCards(rawCards), nil
 }
 
 // GetSearchScreen Get Получить текущий экран поиска
@@ -74,7 +70,8 @@ func (s *Search) IsEnabled() bool {
 
 // Disable Выключить режим поиска.
 func (s *Search) Disable() {
-	s.ResetSearchCriterias()
+	s.ResetCriterias()
+	s.ResetSearchData()
 	s.isEnabled = false
 }
 
@@ -85,6 +82,10 @@ func (s *Search) Enable() {
 
 func (s *Search) AddCriterion(criterion string) {
 	s.chosenCriterions = append(s.chosenCriterions, criterion)
+}
+
+func (s *Search) AddSearchData(data string) {
+	s.searchData = append(s.searchData, data)
 }
 
 func (s *Search) RemoveCriterion(criterion string) {
@@ -100,6 +101,14 @@ func (s *Search) GetCriterions() []string {
 	return s.chosenCriterions
 }
 
-func (s *Search) ResetSearchCriterias() {
+func (s *Search) GetSearchData() []string {
+	return s.searchData
+}
+
+func (s *Search) ResetCriterias() {
 	s.chosenCriterions = nil
+}
+
+func (s *Search) ResetSearchData() {
+	s.searchData = nil
 }

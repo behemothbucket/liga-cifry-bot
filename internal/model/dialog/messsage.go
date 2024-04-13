@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"telegram-bot/internal/logger"
+	"telegram-bot/internal/model/card"
 	"telegram-bot/internal/model/db"
 	"telegram-bot/internal/model/search"
 	"time"
@@ -108,12 +109,12 @@ func (m *Model) HandleMessage(msg Message) error {
 
 	// Режим поиска
 	if m.search.IsEnabled() {
-		// TEST
-		data := []string{msg.Text}
-		cards, err := m.search.ProcessCards(ctx, data, m.storage)
+		m.search.AddSearchData(msg.Text)
+		cards, err := m.search.ProcessCards(ctx, m.storage)
 		if err != nil {
 			logger.Error("Ошибка в поиске карты", "err", err)
 		}
+		m.search.Disable()
 		return m.tgClient.SendCards(cards, msg.ChatID)
 	}
 
@@ -138,7 +139,7 @@ func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) 
 		if err != nil {
 			logger.Error("Ошибка в сборе всех персональных карточек", "err", err)
 		}
-		cards := m.search.FormatCards(rawCards)
+		cards := card.FormatCards(rawCards)
 		return true, m.tgClient.SendCards(cards, msg.ChatID)
 	}
 	return false, nil
@@ -197,14 +198,19 @@ func (m *Model) HandleButton(msg Message) error {
 			msg.ChatID,
 			&MarkupMainMenu,
 		)
+	case BtnMenu:
+		return m.tgClient.SendMessageWithMarkup(
+			fmt.Sprintf(txtMainMenu, firstName),
+			msg.ChatID,
+			&MarkupMainMenu,
+		)
 	case HandleCriterionButton(button, m.search):
-		// searchScreen := m.search.GetSearchScreen()
-		// markup := CreateSearchMenuMarkup(searchScreen)
-		// logger.Debug("%v", markup.InlineKeyboard)
-		// return m.tgClient.EditMarkup(
-		// 	msg,
-		// 	&markup,
-		// )
+		searchScreen := m.search.GetSearchScreen()
+		markup := CreateSearchMenuMarkup(searchScreen)
+		return m.tgClient.EditMarkup(
+			msg,
+			&markup,
+		)
 	}
 
 	return nil
