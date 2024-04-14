@@ -3,11 +3,15 @@ package tg
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
+	"telegram-bot/internal/helpers/dbutils"
 	"telegram-bot/internal/helpers/markdown"
+	"telegram-bot/internal/helpers/tgfile"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/dialog"
 
+	"github.com/go-co-op/gocron/v2"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
 )
@@ -62,16 +66,90 @@ func (c *Client) SendCards(cards []string, chatID int64) error {
 	totalCards := len(cards) - 1
 	for i, card := range cards {
 		if i == totalCards {
-			if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
-				return err
-			}
+			return c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu)
 		} else {
-			if err := c.SendMessage(card, chatID); err != nil {
-				return err
-			}
+			return c.SendMessage(card, chatID)
 		}
 	}
 	return nil
+}
+
+func (c *Client) SendFile(chatID int64, file *tgbotapi.FileBytes) error {
+	documentConfig := tgbotapi.NewDocument(chatID, file)
+	_, err := c.client.Send(documentConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) SendDBDump() error {
+	// Get IDs from ENV
+	chatIDs := []int64{5587823077, 5550380202}
+
+	filePath, err := dbutils.CreateDBDump()
+	if err != nil {
+		logger.Error("Ошибка при создании дампа базы данных:", err)
+	}
+
+	dbDump, err := tgfile.CreateDocument(filePath)
+	if err != nil {
+		logger.Error("Ошибка при создании дампа БД", "err", err)
+	}
+
+	logger.Info("Начинаю рассылку дампа...")
+
+	for _, id := range chatIDs {
+		err = c.SendFile(id, dbDump)
+		if err != nil {
+			logger.Error("Ошибка при отправке файла в телеграм:", err)
+		}
+	}
+
+	logger.Info(fmt.Sprintf("Файл отправлен %s", filePath))
+
+	err = os.Remove(filePath)
+	if err != nil {
+		logger.Error("Ошибка при удалении временного файла:", err)
+	}
+
+	logger.Info(fmt.Sprintf("Файл удален %s", filePath))
+
+	return nil
+}
+
+func (c *Client) StartDBJob(ctx context.Context) {
+	logger.Info("Старт джобы по бэкапу БД")
+	s, err := gocron.NewScheduler()
+	if err != nil {
+		logger.Error("Ошибка в старте шедулера", "err", err)
+	}
+
+	j, err := s.NewJob(
+		gocron.DailyJob(
+			1,
+			gocron.NewAtTimes(
+				gocron.NewAtTime(7, 0, 0),
+			),
+		), gocron.NewTask(c.SendDBDump),
+	)
+	if err != nil {
+		logger.Error("Ошибка в создании джобы", "err", err)
+	}
+
+	logger.Info(fmt.Sprintf("Джоба: [%s] %s", j.Name(), j.ID().String()))
+
+	s.Start()
+
+	<-ctx.Done()
+
+	err = s.Shutdown()
+	if err != nil {
+		logger.Error("Ошибка в завершении джобы", "err", err)
+	}
+
+	logger.Info("Приложение завершило работу, job")
 }
 
 func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
@@ -84,13 +162,11 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	var wg sync.WaitGroup
 
-	// `for {` means the loop is infinite until we manually stop it
 	for {
 		select {
-		// stop looping if ctx is cancelled
 		case <-ctx.Done():
+			logger.Info("Приложение завершило работу, update")
 			return
-		// receive update from channel and then handle it
 		case update := <-updates:
 			wg.Add(1)
 			go func() {

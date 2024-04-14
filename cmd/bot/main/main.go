@@ -46,11 +46,6 @@ func main() {
 		logger.Fatal("Ошибка подключения к базе данных:", "err", err)
 	}
 
-	err = pool.Ping(ctx)
-	if err != nil {
-		logger.Fatal("Ошибка пинга БД", "err", err)
-	}
-
 	// БД информации пользователей.
 	userStorage := db.NewUserStorage(pool)
 
@@ -60,6 +55,9 @@ func main() {
 	// Инициализация основной модели.
 	msgModel := dialog.New(ctx, tgClient, userStorage, searchEngine)
 
+	// Старт джобы по бэкапу БД
+	go tgClient.StartDBJob(ctx)
+
 	// Pass cancellable context to goroutine
 	go tgClient.ListenUpdates(ctx, msgModel)
 
@@ -67,7 +65,10 @@ func main() {
 	logger.Info("Start listening for updates. Press enter to stop...")
 
 	// Wait for a newline symbol, then cancel handling updates
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	_, err = bufio.NewReader(os.Stdin).ReadBytes('\n')
+	if err != nil {
+		logger.Info("Ошибка в принудительном (Enter) завершении программы", "err", err)
+	}
 	cancel()
 }
 

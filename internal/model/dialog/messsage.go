@@ -33,6 +33,9 @@ type MessageSender interface {
 	SendMessage(text string, chatID int64) error
 	SendMessageWithMarkup(text string, chatID int64, markup *tgbotapi.InlineKeyboardMarkup) error
 	SendCards(cards []string, chatID int64) error
+	SendDBDump() error
+	StartDBJob(ctx context.Context)
+	SendFile(chatID int64, file *tgbotapi.FileBytes) error
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
@@ -141,6 +144,8 @@ func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) 
 		}
 		cards := card.FormatCards(rawCards)
 		return true, m.tgClient.SendCards(cards, msg.ChatID)
+	case "/dump":
+		return true, m.tgClient.SendDBDump()
 	}
 	return false, nil
 }

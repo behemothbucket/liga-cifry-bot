@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"telegram-bot/internal/logger"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,6 +29,11 @@ func NewDBConnect(
 
 			return nil
 		}, maxAttempts, 5*time.Second)
+
+	err = pool.Ping(ctx)
+	if err != nil {
+		logger.Fatal("Ошибка пинга БД", "err", err)
+	}
 
 	return pool, nil
 }
