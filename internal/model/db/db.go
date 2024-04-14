@@ -2,11 +2,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"telegram-bot/internal/logger"
-	"telegram-bot/internal/model/card/person"
+	"telegram-bot/internal/model/card"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -34,8 +33,8 @@ type UserDataStorage interface {
 		table string,
 		data []string,
 		crterions []string,
-	) ([]person.PersonCard, error)
-	ShowAllPersonalCards(ctx context.Context) (pc []person.PersonCard, err error)
+	) ([]card.PersonCard, error)
+	ShowAllPersonalCards(ctx context.Context) (pc []card.PersonCard, err error)
 }
 
 // CheckIfUserExist Проверка существования пользователя в базе данных.
@@ -129,33 +128,42 @@ func (s *UserStorage) FindCards(
 	table string,
 	data []string,
 	criterions []string,
-) ([]person.PersonCard, error) {
+) ([]card.PersonCard, error) {
 	if len(criterions) == 0 {
 		return nil, errors.New("at least one criterion is required")
 	}
 
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s ILIKE $1", table, criterions[0])
+	var query string
+	var err error
+	var rows pgx.Rows
 
-	for i := range data {
-		query += fmt.Sprintf(" AND %s ILIKE $%d", data[i], i+2)
+	if len(criterions) == 1 {
+		query = fmt.Sprintf("SELECT * FROM %s WHERE %s ILIKE $1", table, criterions[0])
+		rows, err = s.db.Query(ctx, query, "%"+data[0]+"%")
+	} else {
+		var args []interface{}
+		query = fmt.Sprintf("SELECT * FROM %s WHERE ", table)
+		for i, criterion := range criterions {
+			if i > 0 {
+				query += " AND "
+			}
+			query += fmt.Sprintf("%s ILIKE $%d", data[i], i+1)
+			args = append(args, "%"+criterion+"%")
+		}
+		rows, err = s.db.Query(ctx, query, args...)
 	}
 
-	args := make([]interface{}, len(criterions)+1)
-	args[0] = "%" + criterions[0] + "%"
-	for i := range criterions {
-		args[i+1] = "%" + criterions[i] + "%"
-	}
+	logger.Info(fmt.Sprintf("\nQuery:\n%s\nData:\n%v", query, data))
 
-	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var cards []person.PersonCard
+	var cards []card.PersonCard
 
 	for rows.Next() {
-		var card person.PersonCard
+		var card card.PersonCard
 		err := rows.Scan(
 			&card.ID,
 			&card.Fio,
@@ -173,10 +181,11 @@ func (s *UserStorage) FindCards(
 	}
 
 	if err := rows.Err(); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, errors.New("no rows found")
+		if errors.Is(pgx.ErrNoRows, pgx.ErrTooManyRows) {
+			return nil, err
 		}
 		return nil, err
+
 	}
 
 	return cards, nil
@@ -184,7 +193,7 @@ func (s *UserStorage) FindCards(
 
 func (s *UserStorage) ShowAllPersonalCards(
 	ctx context.Context,
-) (pc []person.PersonCard, err error) {
+) (pc []card.PersonCard, err error) {
 	q := `SELECT * FROM public.personal_cards;`
 
 	rows, err := s.db.Query(ctx, q)
@@ -193,7 +202,7 @@ func (s *UserStorage) ShowAllPersonalCards(
 	}
 	defer rows.Close()
 
-	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[person.PersonCard])
+	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
 	if err != nil {
 		fmt.Printf("CollectRows error: %v", err)
 		return

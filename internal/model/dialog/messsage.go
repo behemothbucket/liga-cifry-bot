@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"telegram-bot/internal/logger"
+	"telegram-bot/internal/model/card"
 	"telegram-bot/internal/model/db"
 	"telegram-bot/internal/model/search"
 	"time"
@@ -20,7 +21,7 @@ var (
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
 	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
-	txtCriteriaInput   = "Пожалуйста, введите *%v*."
+	txtCriteriaInput   = "Пожалуйста, введите ☑️ *%v*."
 )
 
 // Область "Константы и переменные": конец.
@@ -108,16 +109,13 @@ func (m *Model) HandleMessage(msg Message) error {
 
 	// Режим поиска
 	if m.search.IsEnabled() {
-		// TEST
-		data := []string{msg.Text}
-		cards, err := m.search.ProcessCards(ctx, data, m.storage)
+		m.search.AddSearchData(msg.Text)
+		cards, err := m.search.ProcessCards(ctx, m.storage)
 		if err != nil {
 			logger.Error("Ошибка в поиске карты", "err", err)
 		}
-		err = m.tgClient.SendCards(cards, msg.ChatID)
-		if err != nil {
-			logger.Error("Ошибка в отправке карт", "err", err)
-		}
+		m.search.Disable()
+		return m.tgClient.SendCards(cards, msg.ChatID)
 	}
 
 	// Отправка ответа по умолчанию.
@@ -141,7 +139,7 @@ func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) 
 		if err != nil {
 			logger.Error("Ошибка в сборе всех персональных карточек", "err", err)
 		}
-		cards := m.search.FormatCards(rawCards)
+		cards := card.FormatCards(rawCards)
 		return true, m.tgClient.SendCards(cards, msg.ChatID)
 	}
 	return false, nil
@@ -162,7 +160,7 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupMainMenu,
 		)
 	case BtnSearchPerson:
-		m.search.SetSearchScreen("person_cards")
+		m.search.SetSearchScreen("personal_cards")
 		return m.tgClient.EditTextAndMarkup(
 			msg,
 			txtCriterionChoose,
@@ -176,7 +174,6 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupSearchOrganizationMenu,
 		)
 	case BtnApply:
-		m.search.Enable()
 		lenCriterions := len(m.search.GetCriterions())
 		if lenCriterions == 0 {
 			return m.tgClient.EditTextAndMarkup(
@@ -186,6 +183,7 @@ func (m *Model) HandleButton(msg Message) error {
 			)
 			// TEST
 		} else if lenCriterions == 1 {
+			m.search.Enable()
 			return m.tgClient.EditTextAndMarkup(
 				msg,
 				fmt.Sprintf(txtCriteriaInput, m.search.GetCriterions()[0]),
@@ -194,8 +192,13 @@ func (m *Model) HandleButton(msg Message) error {
 		}
 	case BtnCancelSearch:
 		m.search.Disable()
-		m.search.ResetSearchCriterias()
 		ResetCriteriaButtons()
+		return m.tgClient.SendMessageWithMarkup(
+			fmt.Sprintf(txtMainMenu, firstName),
+			msg.ChatID,
+			&MarkupMainMenu,
+		)
+	case BtnMenu:
 		return m.tgClient.SendMessageWithMarkup(
 			fmt.Sprintf(txtMainMenu, firstName),
 			msg.ChatID,

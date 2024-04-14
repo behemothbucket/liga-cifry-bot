@@ -3,6 +3,7 @@ package tg
 import (
 	"context"
 	"fmt"
+	"sync"
 	"telegram-bot/internal/helpers/markdown"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/dialog"
@@ -58,9 +59,16 @@ func (c *Client) SendMessageWithMarkup(
 }
 
 func (c *Client) SendCards(cards []string, chatID int64) error {
-	for _, card := range cards {
-		if err := c.SendMessage(card, chatID); err != nil {
-			return err
+	totalCards := len(cards) - 1
+	for i, card := range cards {
+		if i == totalCards {
+			if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
+				return err
+			}
+		} else {
+			if err := c.SendMessage(card, chatID); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -72,25 +80,33 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	updates := c.client.GetUpdatesChan(u)
 
-	logger.Info("Start listening for tg dialog")
+	logger.Info("Начинаю следить за обновлениями")
 
-	for update := range updates {
-		ProcessingMessages(update, c, msgModel)
+	var wg sync.WaitGroup
+
+	// `for {` means the loop is infinite until we manually stop it
+	for {
+		select {
+		// stop looping if ctx is cancelled
+		case <-ctx.Done():
+			return
+		// receive update from channel and then handle it
+		case update := <-updates:
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ProcessingMessages(update, c, msgModel)
+			}()
+		}
 	}
-
-	// NOTE как это работает?
-	// for {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		return
-	// 	case update := <-updates:
-	// 		c.handlerProcessingFunc.RunFunc(update, c, msgModel)
-	// 	}
-	// }
 }
 
 // ProcessingMessages функция обработки сообщений.
-func ProcessingMessages(update tgbotapi.Update, c *Client, msgModel *dialog.Model) {
+func ProcessingMessages(
+	update tgbotapi.Update,
+	c *Client,
+	msgModel *dialog.Model,
+) {
 	if update.Message != nil {
 		// Пользователь написал текстовое сообщение.
 		logger.Info(
