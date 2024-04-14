@@ -32,7 +32,7 @@ func NewDBConnect(
 
 	err = pool.Ping(ctx)
 	if err != nil {
-		logger.Fatal("Ошибка пинга БД", "err", err)
+		logger.Fatal("Ошибка пинга БД", "ERROR", err)
 	}
 
 	return pool, nil

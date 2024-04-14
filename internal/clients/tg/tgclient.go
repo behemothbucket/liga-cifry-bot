@@ -63,19 +63,18 @@ func (c *Client) SendMessageWithMarkup(
 }
 
 func (c *Client) SendCards(cards []string, chatID int64) error {
-	totalCards := len(cards) - 1
-	for i, card := range cards {
-		if i == totalCards {
-			return c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu)
-		} else {
-			return c.SendMessage(card, chatID)
+	for _, card := range cards {
+		if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (c *Client) SendFile(chatID int64, file *tgbotapi.FileBytes) error {
+func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error {
 	documentConfig := tgbotapi.NewDocument(chatID, file)
+	documentConfig.Caption = fmt.Sprintf("Бэкап БД за %s", currentTime)
+	documentConfig.DisableNotification = true
 	_, err := c.client.Send(documentConfig)
 	if err != nil {
 		return err
@@ -85,26 +84,24 @@ func (c *Client) SendFile(chatID int64, file *tgbotapi.FileBytes) error {
 }
 
 func (c *Client) SendDBDump() error {
-	// Get IDs from ENV
-	chatIDs := []int64{5587823077, 5550380202}
+	// TODO  Get IDs from ENV
+	id := int64(5587823077)
 
-	filePath, err := dbutils.CreateDBDump()
+	filePath, currentTime, err := dbutils.CreateDBDump()
 	if err != nil {
 		logger.Error("Ошибка при создании дампа базы данных:", err)
 	}
 
 	dbDump, err := tgfile.CreateDocument(filePath)
 	if err != nil {
-		logger.Error("Ошибка при создании дампа БД", "err", err)
+		logger.Error("Ошибка при создании дампа БД", "ERROR", err)
 	}
 
 	logger.Info("Начинаю рассылку дампа...")
 
-	for _, id := range chatIDs {
-		err = c.SendFile(id, dbDump)
-		if err != nil {
-			logger.Error("Ошибка при отправке файла в телеграм:", err)
-		}
+	err = c.SendFile(id, dbDump, currentTime)
+	if err != nil {
+		logger.Error("Ошибка при отправке файла в телеграм:", err)
 	}
 
 	logger.Info(fmt.Sprintf("Файл отправлен %s", filePath))
@@ -123,19 +120,19 @@ func (c *Client) StartDBJob(ctx context.Context) {
 	logger.Info("Старт джобы по бэкапу БД")
 	s, err := gocron.NewScheduler()
 	if err != nil {
-		logger.Error("Ошибка в старте шедулера", "err", err)
+		logger.Error("Ошибка в старте шедулера", "ERROR", err)
 	}
 
 	j, err := s.NewJob(
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
-				gocron.NewAtTime(7, 0, 0),
+				gocron.NewAtTime(0, 3, 0),
 			),
 		), gocron.NewTask(c.SendDBDump),
 	)
 	if err != nil {
-		logger.Error("Ошибка в создании джобы", "err", err)
+		logger.Error("Ошибка в создании джобы", "ERROR", err)
 	}
 
 	logger.Info(fmt.Sprintf("Джоба: [%s] %s", j.Name(), j.ID().String()))
@@ -146,7 +143,7 @@ func (c *Client) StartDBJob(ctx context.Context) {
 
 	err = s.Shutdown()
 	if err != nil {
-		logger.Error("Ошибка в завершении джобы", "err", err)
+		logger.Error("Ошибка в завершении джобы", "ERROR", err)
 	}
 
 	logger.Info("Приложение завершило работу, job")
@@ -204,7 +201,7 @@ func ProcessingMessages(
 			LeftChatMembers: update.Message.LeftChatMember,
 		})
 		if err != nil {
-			logger.Error("error processing message:", "err", err)
+			logger.Error("error processing message:", "ERROR", err)
 		}
 	} else if update.CallbackQuery != nil {
 
@@ -215,7 +212,7 @@ func ProcessingMessages(
 		callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "")
 
 		if _, err := c.client.Request(callback); err != nil {
-			logger.Error("Ошибка Request callback:", "err", err)
+			logger.Error("Ошибка Request callback:", "ERROR", err)
 		}
 
 		err := msgModel.HandleButton(dialog.Message{
@@ -228,7 +225,7 @@ func ProcessingMessages(
 			Markup:        update.CallbackQuery.Message.ReplyMarkup,
 		})
 		if err != nil {
-			logger.Error("error handle button from callback:", "err", err)
+			logger.Error("error handle button from callback:", "ERROR", err)
 		}
 	}
 }
@@ -272,7 +269,7 @@ func (c *Client) EditTextAndMarkup(
 		msg.ParseMode = "MarkdownV2"
 		_, err := c.client.Send(msg)
 		if err != nil {
-			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "err", err)
+			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
 			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
 		}
 		return nil
@@ -288,7 +285,7 @@ func (c *Client) EditMarkup(msg dialog.Message, markup *tgbotapi.InlineKeyboardM
 		_msg := tgbotapi.NewEditMessageReplyMarkup(chatID, msgID, *markup)
 		_, err := c.client.Send(_msg)
 		if err != nil {
-			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "err", err)
+			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
 			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
 		}
 	}

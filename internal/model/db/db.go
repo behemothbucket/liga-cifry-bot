@@ -160,32 +160,38 @@ func (s *UserStorage) FindCards(
 	}
 	defer rows.Close()
 
-	var cards []card.PersonCard
+	// var cards []card.PersonCard
+	//
+	// for rows.Next() {
+	// 	var card card.PersonCard
+	// 	err := rows.Scan(
+	// 		&card.ID,
+	// 		&card.Fio,
+	// 		&card.City,
+	// 		&card.Organization,
+	// 		&card.JobTitle,
+	// 		&card.ExpertCompetencies,
+	// 		&card.PossibleCooperation,
+	// 		&card.Contacts,
+	// 	)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	cards = append(cards, card)
+	// }
+	//
+	// if err := rows.Err(); err != nil {
+	// 	if errors.Is(pgx.ErrNoRows, pgx.ErrTooManyRows) {
+	// 		return nil, err
+	// 	}
+	// 	return nil, err
+	//
+	// }
 
-	for rows.Next() {
-		var card card.PersonCard
-		err := rows.Scan(
-			&card.ID,
-			&card.Fio,
-			&card.City,
-			&card.Organization,
-			&card.JobTitle,
-			&card.ExpertCompetencies,
-			&card.PossibleCooperation,
-			&card.Contacts,
-		)
-		if err != nil {
-			return nil, err
-		}
-		cards = append(cards, card)
-	}
-
-	if err := rows.Err(); err != nil {
-		if errors.Is(pgx.ErrNoRows, pgx.ErrTooManyRows) {
-			return nil, err
-		}
+	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
+	if err != nil {
+		fmt.Printf("CollectRows error: %v", err)
 		return nil, err
-
 	}
 
 	return cards, nil
@@ -194,7 +200,7 @@ func (s *UserStorage) FindCards(
 func (s *UserStorage) ShowAllPersonalCards(
 	ctx context.Context,
 ) (pc []card.PersonCard, err error) {
-	q := `SELECT * FROM public.personal_cards;`
+	q := `SELECT * FROM personal_cards;`
 
 	rows, err := s.db.Query(ctx, q)
 	if err != nil {
@@ -205,7 +211,7 @@ func (s *UserStorage) ShowAllPersonalCards(
 	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
 	if err != nil {
 		fmt.Printf("CollectRows error: %v", err)
-		return
+		return nil, err
 	}
 
 	return cards, nil

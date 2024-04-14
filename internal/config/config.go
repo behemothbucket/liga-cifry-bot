@@ -11,6 +11,8 @@ import (
 const configFile = "data/config.yaml"
 
 type Config struct {
+	// TODO лучше сделать всё в переменных среды?
+	// Добавить переменные для cron и джобы (время выполнения, путь и т.д.)
 	Token              string `yaml:"token"`              // Токен бота в телеграме.
 	ConnectionStringDB string `yaml:"ConnectionStringDB"` // Строка подключения в базе данных.
 	MaxAttempts        int    `yaml:"MaxAttempts"`
@@ -25,13 +27,13 @@ func New() (*Service, error) {
 
 	rawYAML, err := os.ReadFile(configFile)
 	if err != nil {
-		logger.Error("Ошибка reading config file", "err", err)
+		logger.Error("Ошибка reading config file", "ERROR", err)
 		return nil, errors.Wrap(err, "reading config file")
 	}
 
 	err = yaml.Unmarshal(rawYAML, &s.config)
 	if err != nil {
-		logger.Error("Ошибка parsing yaml", "err", err)
+		logger.Error("Ошибка parsing yaml", "ERROR", err)
 		return nil, errors.Wrap(err, "parsing yaml")
 	}
 
