@@ -3,11 +3,15 @@ package tg
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
+	"telegram-bot/internal/helpers/dbutils"
 	"telegram-bot/internal/helpers/markdown"
+	"telegram-bot/internal/helpers/tgfile"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/dialog"
 
+	"github.com/go-co-op/gocron/v2"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
 )
@@ -59,19 +63,90 @@ func (c *Client) SendMessageWithMarkup(
 }
 
 func (c *Client) SendCards(cards []string, chatID int64) error {
-	totalCards := len(cards) - 1
-	for i, card := range cards {
-		if i == totalCards {
-			if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
-				return err
-			}
-		} else {
-			if err := c.SendMessage(card, chatID); err != nil {
-				return err
-			}
+	for _, card := range cards {
+		if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error {
+	documentConfig := tgbotapi.NewDocument(chatID, file)
+	documentConfig.Caption = fmt.Sprintf("Бэкап БД за %s", currentTime)
+	documentConfig.DisableNotification = true
+	_, err := c.client.Send(documentConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) SendDBDump() error {
+	// TODO  Get IDs from ENV
+	id := int64(5587823077)
+
+	filePath, currentTime, err := dbutils.CreateDBDump()
+	if err != nil {
+		logger.Error("Ошибка при создании дампа базы данных:", err)
+	}
+
+	dbDump, err := tgfile.CreateDocument(filePath)
+	if err != nil {
+		logger.Error("Ошибка при создании дампа БД", "ERROR", err)
+	}
+
+	logger.Info("Начинаю рассылку дампа...")
+
+	err = c.SendFile(id, dbDump, currentTime)
+	if err != nil {
+		logger.Error("Ошибка при отправке файла в телеграм:", err)
+	}
+
+	logger.Info(fmt.Sprintf("Файл отправлен %s", filePath))
+
+	err = os.Remove(filePath)
+	if err != nil {
+		logger.Error("Ошибка при удалении временного файла:", err)
+	}
+
+	logger.Info(fmt.Sprintf("Файл удален %s", filePath))
+
+	return nil
+}
+
+func (c *Client) StartDBJob(ctx context.Context) {
+	logger.Info("Старт джобы по бэкапу БД")
+	s, err := gocron.NewScheduler()
+	if err != nil {
+		logger.Error("Ошибка в старте шедулера", "ERROR", err)
+	}
+
+	j, err := s.NewJob(
+		gocron.DailyJob(
+			1,
+			gocron.NewAtTimes(
+				gocron.NewAtTime(0, 3, 0),
+			),
+		), gocron.NewTask(c.SendDBDump),
+	)
+	if err != nil {
+		logger.Error("Ошибка в создании джобы", "ERROR", err)
+	}
+
+	logger.Info(fmt.Sprintf("Джоба: [%s] %s", j.Name(), j.ID().String()))
+
+	s.Start()
+
+	<-ctx.Done()
+
+	err = s.Shutdown()
+	if err != nil {
+		logger.Error("Ошибка в завершении джобы", "ERROR", err)
+	}
+
+	logger.Info("Приложение завершило работу, job")
 }
 
 func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
@@ -84,13 +159,11 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	var wg sync.WaitGroup
 
-	// `for {` means the loop is infinite until we manually stop it
 	for {
 		select {
-		// stop looping if ctx is cancelled
 		case <-ctx.Done():
+			logger.Info("Приложение завершило работу, update")
 			return
-		// receive update from channel and then handle it
 		case update := <-updates:
 			wg.Add(1)
 			go func() {
@@ -128,7 +201,7 @@ func ProcessingMessages(
 			LeftChatMembers: update.Message.LeftChatMember,
 		})
 		if err != nil {
-			logger.Error("error processing message:", "err", err)
+			logger.Error("error processing message:", "ERROR", err)
 		}
 	} else if update.CallbackQuery != nil {
 
@@ -139,7 +212,7 @@ func ProcessingMessages(
 		callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "")
 
 		if _, err := c.client.Request(callback); err != nil {
-			logger.Error("Ошибка Request callback:", "err", err)
+			logger.Error("Ошибка Request callback:", "ERROR", err)
 		}
 
 		err := msgModel.HandleButton(dialog.Message{
@@ -152,7 +225,7 @@ func ProcessingMessages(
 			Markup:        update.CallbackQuery.Message.ReplyMarkup,
 		})
 		if err != nil {
-			logger.Error("error handle button from callback:", "err", err)
+			logger.Error("error handle button from callback:", "ERROR", err)
 		}
 	}
 }
@@ -196,7 +269,7 @@ func (c *Client) EditTextAndMarkup(
 		msg.ParseMode = "MarkdownV2"
 		_, err := c.client.Send(msg)
 		if err != nil {
-			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "err", err)
+			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
 			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
 		}
 		return nil
@@ -212,7 +285,7 @@ func (c *Client) EditMarkup(msg dialog.Message, markup *tgbotapi.InlineKeyboardM
 		_msg := tgbotapi.NewEditMessageReplyMarkup(chatID, msgID, *markup)
 		_, err := c.client.Send(_msg)
 		if err != nil {
-			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "err", err)
+			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
 			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
 		}
 	}

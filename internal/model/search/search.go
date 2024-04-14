@@ -8,21 +8,21 @@ import (
 
 type Search struct {
 	searchScreen     string
-	chosenCriterions []string
+	chosenCriterions map[string]string
 	searchData       []string
 	isEnabled        bool
 }
 
 // Engine Интерфейс для работы с поиском карточек.
 type Engine interface {
-	AddCriterion(criterion string)
-	AddSearchData(data string)
-	RemoveCriterion(criterion string)
+	AddCriterion(alias, criterion string)
+	RemoveCriterion(alias string)
+	GetCriterions() map[string]string
 	ResetCriterias()
+	AddSearchData(data string)
 	ResetSearchData()
 	GetSearchScreen() string
 	SetSearchScreen(searchScreen string)
-	GetCriterions() []string
 	GetSearchData() []string
 	IsEnabled() bool
 	Enable()
@@ -30,22 +30,24 @@ type Engine interface {
 	ProcessCards(ctx context.Context, storage db.UserDataStorage) ([]string, error)
 }
 
-func Init() Engine {
-	return &Search{
-		isEnabled: false,
-	}
+func Init() *Search {
+	return &Search{}
 }
 
 func (s *Search) ProcessCards(
 	ctx context.Context,
 	storage db.UserDataStorage,
 ) ([]string, error) {
-	// TODO передавать введенные пользователем данные
+	var criteria string
+	for _, v := range s.GetCriterions() {
+		criteria = v
+	}
+
 	rawCards, err := storage.FindCards(
 		ctx,
 		s.GetSearchScreen(),
 		s.GetSearchData(),
-		s.GetCriterions(),
+		[]string{criteria},
 	)
 	if err != nil {
 		return make([]string, 0), err
@@ -54,12 +56,12 @@ func (s *Search) ProcessCards(
 	return card.FormatCards(rawCards), nil
 }
 
-// GetSearchScreen Get Получить текущий экран поиска
+// GetSearchScreen Получить текущий экран поиска
 func (s *Search) GetSearchScreen() string {
 	return s.searchScreen
 }
 
-// SetSearchScreen Set Назначить текущий экран поиска
+// SetSearchScreen Назначить текущий экран поиска
 func (s *Search) SetSearchScreen(screen string) {
 	s.searchScreen = screen
 }
@@ -80,24 +82,22 @@ func (s *Search) Enable() {
 	s.isEnabled = true
 }
 
-func (s *Search) AddCriterion(criterion string) {
-	s.chosenCriterions = append(s.chosenCriterions, criterion)
+func (s *Search) AddCriterion(alias, criterion string) {
+	if s.chosenCriterions == nil {
+		s.chosenCriterions = make(map[string]string)
+	}
+	s.chosenCriterions[alias] = criterion
+}
+
+func (s *Search) RemoveCriterion(alias string) {
+	delete(s.chosenCriterions, alias)
 }
 
 func (s *Search) AddSearchData(data string) {
 	s.searchData = append(s.searchData, data)
 }
 
-func (s *Search) RemoveCriterion(criterion string) {
-	for i, _criterion := range s.chosenCriterions {
-		if _criterion == criterion {
-			s.chosenCriterions = append(s.chosenCriterions[:i], s.chosenCriterions[i+1:]...)
-			break
-		}
-	}
-}
-
-func (s *Search) GetCriterions() []string {
+func (s *Search) GetCriterions() map[string]string {
 	return s.chosenCriterions
 }
 

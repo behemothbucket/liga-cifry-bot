@@ -21,7 +21,7 @@ var (
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
 	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
-	txtCriteriaInput   = "Пожалуйста, введите ☑️ *%v*."
+	txtCriteriaInput   = "Пожалуйста, введите *%v*."
 )
 
 // Область "Константы и переменные": конец.
@@ -33,6 +33,9 @@ type MessageSender interface {
 	SendMessage(text string, chatID int64) error
 	SendMessageWithMarkup(text string, chatID int64, markup *tgbotapi.InlineKeyboardMarkup) error
 	SendCards(cards []string, chatID int64) error
+	SendDBDump() error
+	StartDBJob(ctx context.Context)
+	SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
@@ -112,7 +115,7 @@ func (m *Model) HandleMessage(msg Message) error {
 		m.search.AddSearchData(msg.Text)
 		cards, err := m.search.ProcessCards(ctx, m.storage)
 		if err != nil {
-			logger.Error("Ошибка в поиске карты", "err", err)
+			logger.Error("Ошибка в поиске карты", "ERROR", err)
 		}
 		m.search.Disable()
 		return m.tgClient.SendCards(cards, msg.ChatID)
@@ -137,10 +140,14 @@ func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) 
 	case "/allpersonalcards":
 		rawCards, err := m.storage.ShowAllPersonalCards(ctx)
 		if err != nil {
-			logger.Error("Ошибка в сборе всех персональных карточек", "err", err)
+			logger.Error("Ошибка в сборе всех персональных карточек", "ERROR", err)
 		}
 		cards := card.FormatCards(rawCards)
 		return true, m.tgClient.SendCards(cards, msg.ChatID)
+	case "/dump":
+		return true, m.tgClient.SendDBDump()
+		// case "/dice":
+		// 	return true, tgbotapi.Dice.Emoji
 	}
 	return false, nil
 }
@@ -184,9 +191,13 @@ func (m *Model) HandleButton(msg Message) error {
 			// TEST
 		} else if lenCriterions == 1 {
 			m.search.Enable()
+			var alias string
+			for key := range m.search.GetCriterions() {
+				alias = key
+			}
 			return m.tgClient.EditTextAndMarkup(
 				msg,
-				fmt.Sprintf(txtCriteriaInput, m.search.GetCriterions()[0]),
+				fmt.Sprintf(txtCriteriaInput, alias),
 				&MarkupCancelMenu,
 			)
 		}

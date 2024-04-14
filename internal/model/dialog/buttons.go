@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"strings"
+	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/search"
 )
 
@@ -42,18 +43,20 @@ func HandleCriterionButton(button string, se search.Engine) string {
 	buttons := BtnCriterions[searchScreen]
 
 	for i, expected := range buttons {
+		logger.Debug(expected[1])
 		if button == expected[1] {
 			if strings.HasPrefix(buttons[i][0], BtnChosenPrefix) {
 				uncheckedButton := strings.TrimPrefix(
-					buttons[i][0],
+					expected[0],
 					BtnChosenPrefix,
 				)
 				buttons[i][0] = uncheckedButton
 				se.RemoveCriterion(uncheckedButton)
 			} else {
-				buttons[i][0] = BtnChosenPrefix + button
-				se.AddCriterion(button)
+				buttons[i][0] = BtnChosenPrefix + expected[0]
+				se.AddCriterion(buttons[i][0], button)
 			}
+			break
 		}
 	}
 
