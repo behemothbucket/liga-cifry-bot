@@ -53,6 +53,6 @@ func doWithTries(fn func() error, attempts int, delay time.Duration) (err error)
 	return
 }
 
-func formatQuery(q string) string {
+func FormatQuery(q string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(q, "\t", ""), "\n", " ")
 }

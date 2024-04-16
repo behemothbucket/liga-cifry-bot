@@ -3,6 +3,7 @@ package dialog
 import (
 	"context"
 	"fmt"
+	"os"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/card"
 	"telegram-bot/internal/model/db"
@@ -17,7 +18,7 @@ import (
 var (
 	txtMainMenu       = "Привет, %v.\nМогу помочь найти карточку компетенций или организации."
 	txtUnknownCommand = "К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start"
-	// txtReportError     = "Не удалось получить данные."
+	txtCardNotFound   = "Ничего не найдено... 🤷‍♂️"
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
 	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
@@ -36,6 +37,8 @@ type MessageSender interface {
 	SendDBDump() error
 	StartDBJob(ctx context.Context)
 	SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error
+	SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error
+	SendMediaGroup(chatID int64, paths []string, caption string) error
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
@@ -72,14 +75,15 @@ type Message struct {
 	Text            string
 	Data            string
 	MsgID           int
+	Markup          *tgbotapi.InlineKeyboardMarkup
 	ChatID          int64
 	UserID          int64
 	BotName         string
 	FirstName       string
+	IsCommand       bool
 	CallbackQuery   *tgbotapi.CallbackQuery
 	NewChatMembers  []tgbotapi.User
 	LeftChatMembers *tgbotapi.User
-	Markup          *tgbotapi.InlineKeyboardMarkup
 }
 
 func (m *Model) GetCtx() context.Context {
@@ -95,44 +99,44 @@ func (m *Model) HandleMessage(msg Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Распознавание стандартных команд.
-	if isNeedReturn, err := CheckBotCommands(ctx, m, msg); err != nil || isNeedReturn {
-		return err
-	}
-
-	// Новый участник группы
-	if len(msg.NewChatMembers) != 0 {
+	switch {
+	case msg.IsCommand:
+		return HandleBotCommands(ctx, m, msg)
+	case len(msg.NewChatMembers) != 0:
 		return m.storage.JoinGroup(ctx, &msg.NewChatMembers[0])
-	}
-
-	// Участник вышел или был удален
-	if msg.LeftChatMembers != nil {
+	case msg.LeftChatMembers != nil:
 		return m.storage.LeaveGroup(ctx, msg.LeftChatMembers)
-	}
-
-	// Режим поиска
-	if m.search.IsEnabled() {
+	case m.search.IsEnabled():
 		m.search.AddSearchData(msg.Text)
 		cards, err := m.search.ProcessCards(ctx, m.storage)
+		if len(cards) == 0 {
+			return m.tgClient.SendMessageWithMarkup(
+				txtCardNotFound,
+				msg.ChatID,
+				&MarkupCardMenu,
+			)
+		}
 		if err != nil {
 			logger.Error("Ошибка в поиске карты", "ERROR", err)
 		}
 		m.search.Disable()
 		return m.tgClient.SendCards(cards, msg.ChatID)
+	default:
+		return m.tgClient.SendMessage(txtUnknownCommand, msg.ChatID)
 	}
-
-	// Отправка ответа по умолчанию.
-	return m.tgClient.SendMessage(txtUnknownCommand, msg.ChatID)
 }
 
 // CheckBotCommands распознавание стандартных команд бота.
-func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) {
+func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
+	// TEST
+	testChatID := int64(5587823077)
+	// testChatID := int64(155401792)
 	switch msg.Text {
 	case "/start", fmt.Sprintf("/start@" + msg.BotName):
 		if m.search.IsEnabled() {
 			m.search.Disable()
 		}
-		return true, m.tgClient.SendMessageWithMarkup(
+		return m.tgClient.SendMessageWithMarkup(
 			fmt.Sprintf(txtMainMenu, msg.FirstName),
 			msg.ChatID,
 			&MarkupMainMenu,
@@ -143,13 +147,19 @@ func CheckBotCommands(ctx context.Context, m *Model, msg Message) (bool, error) 
 			logger.Error("Ошибка в сборе всех персональных карточек", "ERROR", err)
 		}
 		cards := card.FormatCards(rawCards)
-		return true, m.tgClient.SendCards(cards, msg.ChatID)
+		return m.tgClient.SendCards(cards, msg.ChatID)
 	case "/dump":
-		return true, m.tgClient.SendDBDump()
-		// case "/dice":
-		// 	return true, tgbotapi.Dice.Emoji
+		return m.tgClient.SendDBDump()
+	case "/cat":
+		file, _ := os.Open("./img/cat.jpg")
+		reader := tgbotapi.FileReader{Name: file.Name(), Reader: file}
+		return m.tgClient.SendMedia(testChatID, &reader, "Здарова ептить")
+	case "/cats":
+		paths := []string{"./img/cat.jpg", "./img/cat.jpg", "./img/cat.jpg"}
+		return m.tgClient.SendMediaGroup(testChatID, paths, "Бэйби")
 	}
-	return false, nil
+
+	return nil
 }
 
 func (m *Model) HandleButton(msg Message) error {
@@ -210,6 +220,8 @@ func (m *Model) HandleButton(msg Message) error {
 			&MarkupMainMenu,
 		)
 	case BtnMenu:
+		m.search.Disable()
+		ResetCriteriaButtons()
 		return m.tgClient.SendMessageWithMarkup(
 			fmt.Sprintf(txtMainMenu, firstName),
 			msg.ChatID,

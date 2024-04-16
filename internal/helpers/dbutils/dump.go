@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-func CreateDBDump() (string, string, error) {
-	currentTime := time.Now().Format("02.01.2006 15:04:05")
-	filePath := "./dumps/backup.dump"
+func CreateDBDump() (string, error) {
+	currentTime := time.Now().Format("02_01_2006_15_04_05")
+	filePath := fmt.Sprintf("./dumps/backup_%s.sql", currentTime)
 
 	logger.Info("Создаю файл дампа БД...")
 
@@ -17,11 +17,11 @@ func CreateDBDump() (string, string, error) {
 	cmd := exec.Command("bash", "-c", cmdStr)
 	err := cmd.Run()
 	if err != nil {
-		logger.Debug("Ошибка при выполнении дампа", "ERROR", err)
-		return "", currentTime, err
+		logger.Error("Ошибка при выполнении дампа", "ERROR", err)
+		return "", err
 	}
 
 	logger.Info("Дамп успешно создан")
 
-	return filePath, currentTime, nil
+	return filePath, nil
 }
