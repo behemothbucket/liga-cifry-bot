@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"telegram-bot/internal/helpers/dbutils"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/card"
 	"time"
@@ -74,7 +75,7 @@ func (s *UserStorage) JoinGroup(
 		}
 		logger.Info(
 			fmt.Sprintf(
-				"[SQL: JoinGroup] Пользователь с никнеймом @%s обновил свои данные",
+				"[SQL: JoinGroup] Пользователь @%s обновил свои данные",
 				u.UserName,
 			),
 		)
@@ -87,7 +88,7 @@ func (s *UserStorage) JoinGroup(
     `, u.ID, u.UserName, u.FirstName, u.LastName, u.IsBot, true, time.Now(), nil); err != nil {
 			return err
 		}
-		logger.Info(fmt.Sprintf("Пользователь с никнеймом @%s присоединился к группе", u.UserName))
+		logger.Info(fmt.Sprintf("Пользователь @%s присоединился к группе", u.UserName))
 	}
 
 	return nil
@@ -117,10 +118,38 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	}
 
 	logger.Info(
-		fmt.Sprintf("Пользователь с никнеймом @%s вышел из группы или был исключен", u.UserName),
+		fmt.Sprintf("Пользователь @%s вышел из группы или был исключен", u.UserName),
 	)
 
 	return nil
+}
+
+func scanPersonCard(row pgx.Row) (card.PersonCard, error) {
+	var c card.PersonCard
+	var fio, city, organization, jobTitle, expertComp, possibleCoop, contacts *string
+	err := row.Scan(
+		&c.ID,
+		&fio,
+		&city,
+		&organization,
+		&jobTitle,
+		&expertComp,
+		&possibleCoop,
+		&contacts,
+	)
+	if err != nil {
+		return card.PersonCard{}, err
+	}
+
+	c.Fio = processNullString(fio)
+	c.City = processNullString(city)
+	c.Organization = processNullString(organization)
+	c.JobTitle = processNullString(jobTitle)
+	c.ExpertCompetencies = processNullString(expertComp)
+	c.PossibleCooperation = processNullString(possibleCoop)
+	c.Contacts = processNullString(contacts)
+
+	return c, nil
 }
 
 func (s *UserStorage) FindCards(
@@ -134,63 +163,41 @@ func (s *UserStorage) FindCards(
 	}
 
 	var query string
-	var err error
-	var rows pgx.Rows
+	var args []interface{}
 
 	if len(criterions) == 1 {
 		query = fmt.Sprintf("SELECT * FROM %s WHERE %s ILIKE $1", table, criterions[0])
-		rows, err = s.db.Query(ctx, query, "%"+data[0]+"%")
+		args = append(args, "%"+data[0]+"%")
 	} else {
-		var args []interface{}
 		query = fmt.Sprintf("SELECT * FROM %s WHERE ", table)
 		for i, criterion := range criterions {
 			if i > 0 {
 				query += " AND "
 			}
-			query += fmt.Sprintf("%s ILIKE $%d", data[i], i+1)
-			args = append(args, "%"+criterion+"%")
+			query += fmt.Sprintf("%s ILIKE $%d", criterion, i+1)
+			args = append(args, "%"+data[i]+"%")
 		}
-		rows, err = s.db.Query(ctx, query, args...)
 	}
 
-	logger.Info(fmt.Sprintf("\nQuery:\n%s\nData:\n%v", query, data))
-
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	// var cards []card.PersonCard
-	//
-	// for rows.Next() {
-	// 	var card card.PersonCard
-	// 	err := rows.Scan(
-	// 		&card.ID,
-	// 		&card.Fio,
-	// 		&card.City,
-	// 		&card.Organization,
-	// 		&card.JobTitle,
-	// 		&card.ExpertCompetencies,
-	// 		&card.PossibleCooperation,
-	// 		&card.Contacts,
-	// 	)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	cards = append(cards, card)
-	// }
-	//
-	// if err := rows.Err(); err != nil {
-	// 	if errors.Is(pgx.ErrNoRows, pgx.ErrTooManyRows) {
-	// 		return nil, err
-	// 	}
-	// 	return nil, err
-	//
-	// }
+	logger.Info(fmt.Sprintf("\nQuery:\n%s\nData:\n%v", dbutils.FormatQuery(query), data))
 
-	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
-	if err != nil {
-		fmt.Printf("CollectRows error: %v", err)
+	var cards []card.PersonCard
+
+	for rows.Next() {
+		c, err := scanPersonCard(rows)
+		if err != nil {
+			return nil, err
+		}
+		cards = append(cards, c)
+	}
+
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -199,20 +206,37 @@ func (s *UserStorage) FindCards(
 
 func (s *UserStorage) ShowAllPersonalCards(
 	ctx context.Context,
-) (pc []card.PersonCard, err error) {
-	q := `SELECT * FROM personal_cards;`
+) ([]card.PersonCard, error) {
+	query := "SELECT * FROM personal_cards"
 
-	rows, err := s.db.Query(ctx, q)
+	rows, err := s.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	cards, err := pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
-	if err != nil {
-		fmt.Printf("CollectRows error: %v", err)
+	logger.Info(fmt.Sprintf("\nQuery:\n%s", dbutils.FormatQuery(query)))
+
+	var cards []card.PersonCard
+
+	for rows.Next() {
+		c, err := scanPersonCard(rows)
+		if err != nil {
+			return nil, err
+		}
+		cards = append(cards, c)
+	}
+
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
 	return cards, nil
+}
+
+func processNullString(value *string) string {
+	if value == nil {
+		return "Не указано владельцем"
+	}
+	return *value
 }

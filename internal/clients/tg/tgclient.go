@@ -71,11 +71,10 @@ func (c *Client) SendCards(cards []string, chatID int64) error {
 	return nil
 }
 
-func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error {
-	documentConfig := tgbotapi.NewDocument(chatID, file)
-	documentConfig.Caption = fmt.Sprintf("Бэкап БД за %s", currentTime)
-	documentConfig.DisableNotification = true
-	_, err := c.client.Send(documentConfig)
+func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, caption string) error {
+	fileConfig := tgbotapi.NewDocument(chatID, file)
+	fileConfig.Caption = caption
+	_, err := c.client.Send(fileConfig)
 	if err != nil {
 		return err
 	}
@@ -83,11 +82,39 @@ func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, currentTime s
 	return nil
 }
 
+func (c *Client) SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error {
+	fileConfig := tgbotapi.NewPhoto(chatID, file)
+	fileConfig.Caption = caption
+	_, err := c.client.Send(fileConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) SendMediaGroup(chatID int64, paths []string, caption string) error {
+	var mediaGroup []interface{}
+
+	for i, path := range paths {
+		photo := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(path))
+		if i == 0 {
+			photo.Caption = caption
+		}
+		mediaGroup = append(mediaGroup, photo)
+	}
+
+	mg := tgbotapi.NewMediaGroup(chatID, mediaGroup)
+
+	_, err := c.client.SendMediaGroup(mg)
+	return err
+}
+
 func (c *Client) SendDBDump() error {
 	// TODO  Get IDs from ENV
 	id := int64(5587823077)
 
-	filePath, currentTime, err := dbutils.CreateDBDump()
+	filePath, err := dbutils.CreateDBDump()
 	if err != nil {
 		logger.Error("Ошибка при создании дампа базы данных:", err)
 	}
@@ -99,7 +126,7 @@ func (c *Client) SendDBDump() error {
 
 	logger.Info("Начинаю рассылку дампа...")
 
-	err = c.SendFile(id, dbDump, currentTime)
+	err = c.SendFile(id, dbDump, "Бэкап БД")
 	if err != nil {
 		logger.Error("Ошибка при отправке файла в телеграм:", err)
 	}
@@ -159,22 +186,23 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	var wg sync.WaitGroup
 
-	for {
+	// NOTE Или просто for?
+	for update := range updates {
 		select {
 		case <-ctx.Done():
-			logger.Info("Приложение завершило работу, update")
+			logger.Info("Приложение завершило работу")
 			return
-		case update := <-updates:
+		default:
 			wg.Add(1)
-			go func() {
+			go func(update tgbotapi.Update) {
 				defer wg.Done()
 				ProcessingMessages(update, c, msgModel)
-			}()
+			}(update)
 		}
 	}
 }
 
-// ProcessingMessages функция обработки сообщений.
+// ProcessingMessages Функция обработки сообщений.
 func ProcessingMessages(
 	update tgbotapi.Update,
 	c *Client,
@@ -184,7 +212,7 @@ func ProcessingMessages(
 		// Пользователь написал текстовое сообщение.
 		logger.Info(
 			fmt.Sprintf(
-				"[@%s][%v] %s",
+				"[@%s | %v] %s",
 				update.Message.From.UserName,
 				update.Message.From.ID,
 				update.Message.Text,
@@ -195,13 +223,24 @@ func ProcessingMessages(
 			Text:            update.Message.Text,
 			ChatID:          update.Message.Chat.ID,
 			MsgID:           update.Message.MessageID,
+			IsCommand:       update.Message.IsCommand(),
 			BotName:         c.client.Self.UserName,
 			FirstName:       update.Message.From.FirstName,
 			NewChatMembers:  update.Message.NewChatMembers,
 			LeftChatMembers: update.Message.LeftChatMember,
 		})
 		if err != nil {
-			logger.Error("error processing message:", "ERROR", err)
+			errMsg := err.Error()
+			if errMsg == "Forbidden: bot was blocked by the user" ||
+				errMsg == "Forbidden: user is deactivated" {
+				logger.Info(fmt.Sprintf(
+					"Пользователь [%s | @%s] заблокировал бота или был деактивирован",
+					update.Message.From.FirstName,
+					update.Message.From.UserName,
+				))
+			} else {
+				logger.Error("Ошибка при обработке сообщения:", "ERROR", errMsg)
+			}
 		}
 	} else if update.CallbackQuery != nil {
 
@@ -253,7 +292,7 @@ func isDuplicateEdit(
 	return false
 }
 
-// EditTextAndMarkup замена текста и инлайн-кнопок.
+// EditTextAndMarkup Замена текста и инлайн-кнопок.
 // Их нажатие ожидает коллбек-ответ.
 func (c *Client) EditTextAndMarkup(
 	msg dialog.Message,
@@ -272,11 +311,11 @@ func (c *Client) EditTextAndMarkup(
 			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
 			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
 		}
-		return nil
 	}
 	return nil
 }
 
+// EditMarkup Замена инлайн-кнопок
 func (c *Client) EditMarkup(msg dialog.Message, markup *tgbotapi.InlineKeyboardMarkup) error {
 	if !isDuplicateEdit(msg, "", markup, true) {
 		chatID := msg.ChatID
