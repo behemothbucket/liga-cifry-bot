@@ -50,7 +50,7 @@ func (s *Search) ProcessCards(
 		[]string{criteria},
 	)
 	if err != nil {
-		return make([]string, 0), err
+		return nil, err
 	}
 
 	return card.FormatCards(rawCards), nil

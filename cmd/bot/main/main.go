@@ -58,6 +58,9 @@ func main() {
 	// Старт джобы по бэкапу БД
 	go tgClient.StartDBJob(ctx)
 
+	// Старт обработчика отсроченных сообщений.
+	go tgClient.SendDeferredMessages()
+
 	// Pass cancellable context to goroutine
 	go tgClient.ListenUpdates(ctx, msgModel)
 

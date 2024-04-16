@@ -4,19 +4,32 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"telegram-bot/internal/helpers/dbutils"
 	"telegram-bot/internal/helpers/markdown"
 	"telegram-bot/internal/helpers/tgfile"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/dialog"
+	"time"
 
 	"github.com/go-co-op/gocron/v2"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
 )
 
+const (
+	sendCooldownPerUser = int64(time.Second / 3)
+	sendInterval        = time.Second
+)
+
+var (
+	deferredMessages = make(map[int64]chan dialog.Message)
+	lastMessageTimes = make(map[int64]int64)
+)
+
 type Client struct {
+	sync.RWMutex
 	client *tgbotapi.BotAPI
 }
 
@@ -35,20 +48,41 @@ func New(tokenGetter TokenGetter) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) SendMessage(text string, chatID int64) error {
-	text = markdown.EscapeForMarkdown(text)
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = "MarkdownV2"
-	_, err := c.client.Send(msg)
-	if err != nil {
-		return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
-	}
-	return nil
+// func prepareParams(
+// 	chatId int,
+// 	text, caption string,
+// 	markup tgbotapi.InlineKeyboardMarkup,
+// 	cards []string,
+// ) (map[string]string, error) {
+// 	params := make(map[string]string)
+// 	params["chat_id"] = strconv.Itoa(chatId)
+// 	params["text"] = markdown.EscapeForMarkdown(text)
+// 	params["caption"] = caption
+// 	params["parse_mode"] = "MarkdownV2"
+//
+// 	// if markup != nil {
+// 	// 	params["reply_markup"] = markup)
+// 	// }
+//
+// 	// if cards != nil {
+// 	// 	params["cards"] = cards
+// 	// }
+// 	//
+// 	return params, nil
+// }
+
+func (c *Client) SendMessage(msg dialog.Message) error {
+	// text = markdown.EscapeForMarkdown(text)
+	// msg := tgbotapi.NewMessage(chatID, text)
+	// msg.ParseMode = "MarkdownV2"
+	//
+
+	return errors.Errorf("T")
 }
 
 func (c *Client) SendMessageWithMarkup(
-	text string,
 	chatID int64,
+	text string,
 	markup *tgbotapi.InlineKeyboardMarkup,
 ) error {
 	text = markdown.EscapeForMarkdown(text)
@@ -62,9 +96,9 @@ func (c *Client) SendMessageWithMarkup(
 	return nil
 }
 
-func (c *Client) SendCards(cards []string, chatID int64) error {
+func (c *Client) SendCards(chatID int64, cards []string) error {
 	for _, card := range cards {
-		if err := c.SendMessageWithMarkup(card, chatID, &dialog.MarkupCardMenu); err != nil {
+		if err := c.SendMessageWithMarkup(chatID, card, &dialog.MarkupCardMenu); err != nil {
 			return err
 		}
 	}
@@ -184,22 +218,69 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	logger.Info("Начинаю следить за обновлениями")
 
-	var wg sync.WaitGroup
+	// var wg sync.WaitGroup
 
-	// NOTE Или просто for?
 	for update := range updates {
 		select {
 		case <-ctx.Done():
 			logger.Info("Приложение завершило работу")
 			return
 		default:
-			wg.Add(1)
-			go func(update tgbotapi.Update) {
-				defer wg.Done()
-				ProcessingMessages(update, c, msgModel)
-			}(update)
+			// wg.Add(1)
+			// go func(update tgbotapi.Update) {
+			// defer wg.Done()
+			ProcessingMessages(update, c, msgModel)
+			// }(update)
 		}
 	}
+}
+
+func (c *Client) SendDeferredMessage(msg dialog.Message) {
+	chatId := msg.ChatID
+
+	c.Lock()
+	defer c.Unlock()
+
+	if _, ok := deferredMessages[chatId]; !ok {
+		deferredMessages[chatId] = make(chan dialog.Message, 100)
+	}
+
+	deferredMessages[chatId] <- msg
+}
+
+func (c *Client) SendDeferredMessages() {
+	timer := time.NewTicker(sendInterval)
+
+	for range timer.C {
+		var cases []reflect.SelectCase
+
+		for chatId, ch := range deferredMessages {
+			if userCanReceiveMessage(chatId) && len(ch) > 0 {
+				sc := reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+				cases = append(cases, sc)
+			}
+		}
+
+		if len(cases) > 0 {
+			_, value, ok := reflect.Select(cases)
+
+			if ok {
+				dm := value.Interface().(dialog.Message)
+				err := c.SendMessage(dm)
+				if err != nil {
+					logger.Error("Ошибка в отправке отложенного сообщения", "ERROR", err)
+				}
+
+				lastMessageTimes[dm.ChatID] = time.Now().UnixNano()
+			}
+		}
+	}
+}
+
+func userCanReceiveMessage(userId int64) bool {
+	t, ok := lastMessageTimes[userId]
+
+	return !ok || t+sendCooldownPerUser <= time.Now().UnixNano()
 }
 
 // ProcessingMessages Функция обработки сообщений.
@@ -215,19 +296,17 @@ func ProcessingMessages(
 				"[@%s | %v] %s",
 				update.Message.From.UserName,
 				update.Message.From.ID,
-				update.Message.Text,
-			),
+				update.Message.Text),
 		)
 
 		err := msgModel.HandleMessage(dialog.Message{
-			Text:            update.Message.Text,
-			ChatID:          update.Message.Chat.ID,
-			MsgID:           update.Message.MessageID,
-			IsCommand:       update.Message.IsCommand(),
-			BotName:         c.client.Self.UserName,
-			FirstName:       update.Message.From.FirstName,
-			NewChatMembers:  update.Message.NewChatMembers,
-			LeftChatMembers: update.Message.LeftChatMember,
+			Text:           update.Message.Text,
+			ChatID:         update.Message.Chat.ID,
+			IsCommand:      update.Message.IsCommand(),
+			BotName:        c.client.Self.UserName,
+			FirstName:      update.Message.From.FirstName,
+			NewChatMembers: update.Message.NewChatMembers,
+			LeftChatMember: update.Message.LeftChatMember,
 		})
 		if err != nil {
 			errMsg := err.Error()
@@ -243,7 +322,6 @@ func ProcessingMessages(
 			}
 		}
 	} else if update.CallbackQuery != nil {
-
 		// Пользователь нажал кнопку.
 		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", update.CallbackQuery.From.UserName, update.CallbackQuery.From.ID, update.CallbackQuery.Data))
 
@@ -255,13 +333,7 @@ func ProcessingMessages(
 		}
 
 		err := msgModel.HandleButton(dialog.Message{
-			ChatID:        update.CallbackQuery.Message.Chat.ID,
-			MsgID:         update.CallbackQuery.Message.MessageID,
 			CallbackQuery: update.CallbackQuery,
-			Data:          update.CallbackQuery.Data,
-			FirstName:     update.CallbackQuery.From.FirstName,
-			Text:          update.CallbackQuery.Message.Text,
-			Markup:        update.CallbackQuery.Message.ReplyMarkup,
 		})
 		if err != nil {
 			logger.Error("error handle button from callback:", "ERROR", err)
@@ -277,7 +349,7 @@ func isDuplicateEdit(
 	onlyMarkup bool,
 ) bool {
 	oldText := msg.Text
-	oldMarkup := msg.Markup
+	oldMarkup := msg.CallbackQuery.Message.ReplyMarkup
 
 	if onlyMarkup {
 		if markup == oldMarkup {

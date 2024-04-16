@@ -124,34 +124,6 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	return nil
 }
 
-func scanPersonCard(row pgx.Row) (card.PersonCard, error) {
-	var c card.PersonCard
-	var fio, city, organization, jobTitle, expertComp, possibleCoop, contacts *string
-	err := row.Scan(
-		&c.ID,
-		&fio,
-		&city,
-		&organization,
-		&jobTitle,
-		&expertComp,
-		&possibleCoop,
-		&contacts,
-	)
-	if err != nil {
-		return card.PersonCard{}, err
-	}
-
-	c.Fio = processNullString(fio)
-	c.City = processNullString(city)
-	c.Organization = processNullString(organization)
-	c.JobTitle = processNullString(jobTitle)
-	c.ExpertCompetencies = processNullString(expertComp)
-	c.PossibleCooperation = processNullString(possibleCoop)
-	c.Contacts = processNullString(contacts)
-
-	return c, nil
-}
-
 func (s *UserStorage) FindCards(
 	ctx context.Context,
 	table string,
@@ -189,15 +161,21 @@ func (s *UserStorage) FindCards(
 
 	var cards []card.PersonCard
 
-	for rows.Next() {
-		c, err := scanPersonCard(rows)
-		if err != nil {
-			return nil, err
-		}
-		cards = append(cards, c)
-	}
-
-	if err := rows.Err(); err != nil {
+	cards, err = pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
+	if err != nil {
+		// if errors.Is(err, pgx.ErrNoRows) {
+		// 	logger.Info(
+		// 		"Не найдено ни одной записи по данному запросу",
+		// 	)
+		// 	return nil, err
+		// }
+		// if errors.Is(err, pgx.ErrTooManyRows) {
+		// 	logger.Info(
+		// 		"Найдено слишком много записей",
+		// 	)
+		// 	return nil, err
+		// }
+		logger.Error("Ошибка при конвертации строк в структуру", "ERROR", err)
 		return nil, err
 	}
 
@@ -219,24 +197,23 @@ func (s *UserStorage) ShowAllPersonalCards(
 
 	var cards []card.PersonCard
 
-	for rows.Next() {
-		c, err := scanPersonCard(rows)
-		if err != nil {
-			return nil, err
-		}
-		cards = append(cards, c)
-	}
-
-	if err := rows.Err(); err != nil {
+	cards, err = pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
+	if err != nil {
+		// if errors.Is(err, pgx.ErrNoRows) {
+		// 	logger.Info(
+		// 		"Не найдено ни одной записи по данному запросу",
+		// 	)
+		// 	return nil, err
+		// }
+		// if errors.Is(err, pgx.ErrTooManyRows) {
+		// 	logger.Info(
+		// 		"Найдено слишком много записей",
+		// 	)
+		// 	return nil, err
+		// }
+		logger.Error("Ошибка при конвертации строк в структуру", "ERROR", err)
 		return nil, err
 	}
 
 	return cards, nil
-}
-
-func processNullString(value *string) string {
-	if value == nil {
-		return "Не указано владельцем"
-	}
-	return *value
 }

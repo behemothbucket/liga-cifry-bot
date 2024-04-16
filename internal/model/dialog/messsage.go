@@ -31,20 +31,25 @@ var (
 
 // MessageSender Интерфейс для работы с сообщениями.
 type MessageSender interface {
-	SendMessage(text string, chatID int64) error
-	SendMessageWithMarkup(text string, chatID int64, markup *tgbotapi.InlineKeyboardMarkup) error
-	SendCards(cards []string, chatID int64) error
-	SendDBDump() error
-	StartDBJob(ctx context.Context)
-	SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error
-	SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error
-	SendMediaGroup(chatID int64, paths []string, caption string) error
+	SendMessage(msg Message) error
+	// SendMessageWithMarkup(
+	// 	chatID int64,
+	// 	text string,
+	// 	markup *tgbotapi.InlineKeyboardMarkup,
+	// ) DeferredMessage
+	// SendCards(chatID int64, cards []string) DeferredMessage
+	// SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) DeferredMessage
+	// SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) DeferredMessage
+	// SendMediaGroup(chatID int64, paths []string, caption string) DeferredMessage
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
 		newMarkup *tgbotapi.InlineKeyboardMarkup,
 	) error
 	EditMarkup(msg Message, markup *tgbotapi.InlineKeyboardMarkup) error
+	DeferUpdate(update tgbotapi.Update)
+	StartDBJob(ctx context.Context)
+	SendDBDump() error
 }
 
 // Model Модель бота (клиент, хранилище, поиск)
@@ -72,18 +77,15 @@ func New(
 
 // Message Структура сообщения для обработки.
 type Message struct {
-	Text            string
-	Data            string
-	MsgID           int
-	Markup          *tgbotapi.InlineKeyboardMarkup
-	ChatID          int64
-	UserID          int64
-	BotName         string
-	FirstName       string
-	IsCommand       bool
-	CallbackQuery   *tgbotapi.CallbackQuery
-	NewChatMembers  []tgbotapi.User
-	LeftChatMembers *tgbotapi.User
+	Text           string
+	ChatID         int64
+	IsCommand      bool
+	BotName        string
+	FirstName      string
+	MsgID          int
+	CallbackQuery  *tgbotapi.CallbackQuery
+	NewChatMembers []tgbotapi.User
+	LeftChatMember *tgbotapi.User
 }
 
 func (m *Model) GetCtx() context.Context {
@@ -109,10 +111,13 @@ func (m *Model) HandleMessage(msg Message) error {
 	case m.search.IsEnabled():
 		m.search.AddSearchData(msg.Text)
 		cards, err := m.search.ProcessCards(ctx, m.storage)
-		if len(cards) == 0 {
+		if cards == nil {
+			logger.Info(
+				"Не найдено ни одной записи по данному запросу",
+			)
 			return m.tgClient.SendMessageWithMarkup(
-				txtCardNotFound,
 				msg.ChatID,
+				txtCardNotFound,
 				&MarkupCardMenu,
 			)
 		}
@@ -120,9 +125,9 @@ func (m *Model) HandleMessage(msg Message) error {
 			logger.Error("Ошибка в поиске карты", "ERROR", err)
 		}
 		m.search.Disable()
-		return m.tgClient.SendCards(cards, msg.ChatID)
+		return m.tgClient.SendCards(msg.ChatID, cards)
 	default:
-		return m.tgClient.SendMessage(txtUnknownCommand, msg.ChatID)
+		return m.tgClient.SendMessage(msg.ChatID, txtUnknownCommand)
 	}
 }
 
@@ -137,8 +142,8 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
 			m.search.Disable()
 		}
 		return m.tgClient.SendMessageWithMarkup(
-			fmt.Sprintf(txtMainMenu, msg.FirstName),
 			msg.ChatID,
+			fmt.Sprintf(txtMainMenu, msg.FirstName),
 			&MarkupMainMenu,
 		)
 	case "/allpersonalcards":
@@ -147,7 +152,7 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
 			logger.Error("Ошибка в сборе всех персональных карточек", "ERROR", err)
 		}
 		cards := card.FormatCards(rawCards)
-		return m.tgClient.SendCards(cards, msg.ChatID)
+		return m.tgClient.SendCards(msg.ChatID, cards)
 	case "/dump":
 		return m.tgClient.SendDBDump()
 	case "/cat":
@@ -215,16 +220,16 @@ func (m *Model) HandleButton(msg Message) error {
 		m.search.Disable()
 		ResetCriteriaButtons()
 		return m.tgClient.SendMessageWithMarkup(
-			fmt.Sprintf(txtMainMenu, firstName),
 			msg.ChatID,
+			fmt.Sprintf(txtMainMenu, firstName),
 			&MarkupMainMenu,
 		)
 	case BtnMenu:
 		m.search.Disable()
 		ResetCriteriaButtons()
 		return m.tgClient.SendMessageWithMarkup(
-			fmt.Sprintf(txtMainMenu, firstName),
 			msg.ChatID,
+			fmt.Sprintf(txtMainMenu, firstName),
 			&MarkupMainMenu,
 		)
 	case HandleCriterionButton(button, m.search):
