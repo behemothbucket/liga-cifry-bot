@@ -48,47 +48,11 @@ func New(tokenGetter TokenGetter) (*Client, error) {
 	}, nil
 }
 
-// func prepareParams(
-// 	chatId int,
-// 	text, caption string,
-// 	markup tgbotapi.InlineKeyboardMarkup,
-// 	cards []string,
-// ) (map[string]string, error) {
-// 	params := make(map[string]string)
-// 	params["chat_id"] = strconv.Itoa(chatId)
-// 	params["text"] = markdown.EscapeForMarkdown(text)
-// 	params["caption"] = caption
-// 	params["parse_mode"] = "MarkdownV2"
-//
-// 	// if markup != nil {
-// 	// 	params["reply_markup"] = markup)
-// 	// }
-//
-// 	// if cards != nil {
-// 	// 	params["cards"] = cards
-// 	// }
-// 	//
-// 	return params, nil
-// }
-
-func (c *Client) SendMessage(msg dialog.Message) error {
-	// text = markdown.EscapeForMarkdown(text)
-	// msg := tgbotapi.NewMessage(chatID, text)
-	// msg.ParseMode = "MarkdownV2"
-	//
-
-	return errors.Errorf("T")
-}
-
-func (c *Client) SendMessageWithMarkup(
-	chatID int64,
-	text string,
-	markup *tgbotapi.InlineKeyboardMarkup,
-) error {
-	text = markdown.EscapeForMarkdown(text)
-	msg := tgbotapi.NewMessage(chatID, text)
+func (c *Client) SendMessageWithMarkup(message dialog.Message) error {
+	text := markdown.EscapeForMarkdown(message.Text)
+	msg := tgbotapi.NewMessage(message.ChatID, text)
 	msg.ParseMode = "MarkdownV2"
-	msg.ReplyMarkup = markup
+	msg.ReplyMarkup = message.Markup
 	_, err := c.client.Send(msg)
 	if err != nil {
 		return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
@@ -96,18 +60,43 @@ func (c *Client) SendMessageWithMarkup(
 	return nil
 }
 
-func (c *Client) SendCards(chatID int64, cards []string) error {
-	for _, card := range cards {
-		if err := c.SendMessageWithMarkup(chatID, card, &dialog.MarkupCardMenu); err != nil {
-			return err
+func (c *Client) SendMessage(msg dialog.Message, msgType string) error {
+	switch msgType {
+	case "SendMessageWithMarkup":
+		return c.SendMessageWithMarkup(msg)
+	case "SendCards":
+		for _, card := range msg.Cards {
+			msg.Text = card
+			c.DeferMessage(msg)
 		}
+		return nil
+	case "SendFile":
+		return c.SendFile(msg)
+	case "SendMedia":
+		return c.SendMedia(msg)
+	case "SendMediaGroup":
+		return c.SendMediaGroup(msg)
+	case "SendDBDump":
+		return c.SendDBDump()
+	case "EditTextAndMarkup":
+		return c.EditTextAndMarkup(msg)
+	case "EditMarkup":
+		return c.EditMarkup(msg)
+	default:
+		text := markdown.EscapeForMarkdown(msg.Text)
+		msg := tgbotapi.NewMessage(msg.ChatID, text)
+		msg.ParseMode = "MarkdownV2"
+		_, err := c.client.Send(msg)
+		if err != nil {
+			return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
+		}
+		return nil
 	}
-	return nil
 }
 
-func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, caption string) error {
-	fileConfig := tgbotapi.NewDocument(chatID, file)
-	fileConfig.Caption = caption
+func (c *Client) SendFile(msg dialog.Message) error {
+	fileConfig := tgbotapi.NewDocument(msg.ChatID, msg.File)
+	fileConfig.Caption = msg.Caption
 	_, err := c.client.Send(fileConfig)
 	if err != nil {
 		return err
@@ -116,9 +105,9 @@ func (c *Client) SendFile(chatID int64, file *tgbotapi.FileReader, caption strin
 	return nil
 }
 
-func (c *Client) SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error {
-	fileConfig := tgbotapi.NewPhoto(chatID, file)
-	fileConfig.Caption = caption
+func (c *Client) SendMedia(msg dialog.Message) error {
+	fileConfig := tgbotapi.NewPhoto(msg.ChatID, msg.Photo)
+	fileConfig.Caption = msg.Caption
 	_, err := c.client.Send(fileConfig)
 	if err != nil {
 		return err
@@ -127,18 +116,18 @@ func (c *Client) SendMedia(chatID int64, file *tgbotapi.FileReader, caption stri
 	return nil
 }
 
-func (c *Client) SendMediaGroup(chatID int64, paths []string, caption string) error {
+func (c *Client) SendMediaGroup(msg dialog.Message) error {
 	var mediaGroup []interface{}
 
-	for i, path := range paths {
+	for i, path := range msg.FilePaths {
 		photo := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(path))
 		if i == 0 {
-			photo.Caption = caption
+			photo.Caption = msg.Caption
 		}
 		mediaGroup = append(mediaGroup, photo)
 	}
 
-	mg := tgbotapi.NewMediaGroup(chatID, mediaGroup)
+	mg := tgbotapi.NewMediaGroup(msg.ChatID, mediaGroup)
 
 	_, err := c.client.SendMediaGroup(mg)
 	return err
@@ -160,7 +149,15 @@ func (c *Client) SendDBDump() error {
 
 	logger.Info("Начинаю рассылку дампа...")
 
-	err = c.SendFile(id, dbDump, "Бэкап БД")
+	msg := dialog.Message{
+		ChatID:  id,
+		File:    dbDump,
+		Caption: "Бэкап БД",
+		Type:    "SendDBDump",
+	}
+	c.DeferMessage(msg)
+
+	// TODO обрабатывать ошибку отправки файла
 	if err != nil {
 		logger.Error("Ошибка при отправке файла в телеграм:", err)
 	}
@@ -188,7 +185,7 @@ func (c *Client) StartDBJob(ctx context.Context) {
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
-				gocron.NewAtTime(0, 3, 0),
+				gocron.NewAtTime(17, 0, 50),
 			),
 		), gocron.NewTask(c.SendDBDump),
 	)
@@ -218,7 +215,7 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	logger.Info("Начинаю следить за обновлениями")
 
-	// var wg sync.WaitGroup
+	var wg sync.WaitGroup
 
 	for update := range updates {
 		select {
@@ -226,16 +223,16 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 			logger.Info("Приложение завершило работу")
 			return
 		default:
-			// wg.Add(1)
-			// go func(update tgbotapi.Update) {
-			// defer wg.Done()
-			ProcessingMessages(update, c, msgModel)
-			// }(update)
+			wg.Add(1)
+			go func(update tgbotapi.Update) {
+				defer wg.Done()
+				ProcessingMessages(update, c, msgModel)
+			}(update)
 		}
 	}
 }
 
-func (c *Client) SendDeferredMessage(msg dialog.Message) {
+func (c *Client) DeferMessage(msg dialog.Message) {
 	chatId := msg.ChatID
 
 	c.Lock()
@@ -266,11 +263,20 @@ func (c *Client) SendDeferredMessages() {
 
 			if ok {
 				dm := value.Interface().(dialog.Message)
-				err := c.SendMessage(dm)
+				err := c.SendMessage(dm, dm.Type)
 				if err != nil {
-					logger.Error("Ошибка в отправке отложенного сообщения", "ERROR", err)
+					errMsg := err.Error()
+					if errMsg == "Forbidden: bot was blocked by the user" ||
+						errMsg == "Forbidden: user is deactivated" {
+						logger.Info(fmt.Sprintf(
+							"Пользователь [%s | @%s] заблокировал бота или был деактивирован",
+							dm.FirstName,
+							dm.UserName,
+						))
+					} else {
+						logger.Error("Ошибка при обработке сообщения:", "ERROR", errMsg)
+					}
 				}
-
 				lastMessageTimes[dm.ChatID] = time.Now().UnixNano()
 			}
 		}
@@ -290,7 +296,6 @@ func ProcessingMessages(
 	msgModel *dialog.Model,
 ) {
 	if update.Message != nil {
-		// Пользователь написал текстовое сообщение.
 		logger.Info(
 			fmt.Sprintf(
 				"[@%s | %v] %s",
@@ -298,8 +303,7 @@ func ProcessingMessages(
 				update.Message.From.ID,
 				update.Message.Text),
 		)
-
-		err := msgModel.HandleMessage(dialog.Message{
+		msgModel.HandleMessage(dialog.Message{
 			Text:           update.Message.Text,
 			ChatID:         update.Message.Chat.ID,
 			IsCommand:      update.Message.IsCommand(),
@@ -308,55 +312,36 @@ func ProcessingMessages(
 			NewChatMembers: update.Message.NewChatMembers,
 			LeftChatMember: update.Message.LeftChatMember,
 		})
-		if err != nil {
-			errMsg := err.Error()
-			if errMsg == "Forbidden: bot was blocked by the user" ||
-				errMsg == "Forbidden: user is deactivated" {
-				logger.Info(fmt.Sprintf(
-					"Пользователь [%s | @%s] заблокировал бота или был деактивирован",
-					update.Message.From.FirstName,
-					update.Message.From.UserName,
-				))
-			} else {
-				logger.Error("Ошибка при обработке сообщения:", "ERROR", errMsg)
-			}
-		}
 	} else if update.CallbackQuery != nil {
-		// Пользователь нажал кнопку.
 		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", update.CallbackQuery.From.UserName, update.CallbackQuery.From.ID, update.CallbackQuery.Data))
-
-		// Text if not specified, nothing will be shown to the user
 		callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "")
-
 		if _, err := c.client.Request(callback); err != nil {
 			logger.Error("Ошибка Request callback:", "ERROR", err)
 		}
-
-		err := msgModel.HandleButton(dialog.Message{
+		msgModel.HandleButton(dialog.Message{
 			CallbackQuery: update.CallbackQuery,
+			MsgID:         update.CallbackQuery.Message.MessageID,
+			ChatID:        update.CallbackQuery.Message.Chat.ID,
 		})
-		if err != nil {
-			logger.Error("error handle button from callback:", "ERROR", err)
-		}
 	}
 }
 
 // isDuplicateEdit Проверка на действия, которые не приведут к изменениям
 func isDuplicateEdit(
 	msg dialog.Message,
-	text string,
-	markup *tgbotapi.InlineKeyboardMarkup,
 	onlyMarkup bool,
 ) bool {
+	newText := msg.NewText
 	oldText := msg.Text
+	newMarkup := msg.Markup
 	oldMarkup := msg.CallbackQuery.Message.ReplyMarkup
 
 	if onlyMarkup {
-		if markup == oldMarkup {
+		if &newMarkup == oldMarkup {
 			return true
 		}
 	} else {
-		if (markup == oldMarkup) && (text == oldText) {
+		if (&newMarkup == oldMarkup) && (newText == oldText) {
 			return true
 		}
 	}
@@ -368,15 +353,13 @@ func isDuplicateEdit(
 // Их нажатие ожидает коллбек-ответ.
 func (c *Client) EditTextAndMarkup(
 	msg dialog.Message,
-	text string,
-	markup *tgbotapi.InlineKeyboardMarkup,
 ) error {
-	if !isDuplicateEdit(msg, text, markup, false) {
+	if !isDuplicateEdit(msg, false) {
 		chatID := msg.ChatID
 		msgID := msg.MsgID
-		text = markdown.EscapeForMarkdown(text)
+		text := markdown.EscapeForMarkdown(msg.NewText)
 
-		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, *markup)
+		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, msg.Markup)
 		msg.ParseMode = "MarkdownV2"
 		_, err := c.client.Send(msg)
 		if err != nil {
@@ -388,12 +371,13 @@ func (c *Client) EditTextAndMarkup(
 }
 
 // EditMarkup Замена инлайн-кнопок
-func (c *Client) EditMarkup(msg dialog.Message, markup *tgbotapi.InlineKeyboardMarkup) error {
-	if !isDuplicateEdit(msg, "", markup, true) {
+func (c *Client) EditMarkup(msg dialog.Message) error {
+	if !isDuplicateEdit(msg, true) {
 		chatID := msg.ChatID
 		msgID := msg.MsgID
+		markup := msg.Markup
 
-		_msg := tgbotapi.NewEditMessageReplyMarkup(chatID, msgID, *markup)
+		_msg := tgbotapi.NewEditMessageReplyMarkup(chatID, msgID, markup)
 		_, err := c.client.Send(_msg)
 		if err != nil {
 			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
