@@ -43,17 +43,33 @@ func (s *Search) ProcessCards(
 		criteria = v
 	}
 
-	rawCards, err := storage.FindCards(
-		ctx,
-		s.GetSearchScreen(),
-		s.GetSearchData(),
-		[]string{criteria},
-	)
-	if err != nil {
-		return nil, err
-	}
+	searchScreen := s.GetSearchScreen()
+	searchData := s.GetSearchData()
 
-	return card.FormatCards(rawCards), nil
+	if searchScreen == "personal_cards" {
+		rawCards, err := storage.FindPersonCards(
+			ctx,
+			s.GetSearchScreen(),
+			searchData,
+			[]string{criteria},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return card.FormatCardsAndHighlightPerson(rawCards, true, searchData), nil
+
+	} else {
+		rawCards, err := storage.FindOrganizationCards(
+			ctx,
+			s.GetSearchScreen(),
+			searchData,
+			[]string{criteria},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return card.FormatCardsAndHighlightOrganization(rawCards, true, searchData), nil
+	}
 }
 
 // GetSearchScreen Получить текущий экран поиска

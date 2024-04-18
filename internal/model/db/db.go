@@ -29,12 +29,18 @@ type UserDataStorage interface {
 	JoinGroup(ctx context.Context, u *tgbotapi.User) error
 	LeaveGroup(ctx context.Context, u *tgbotapi.User) error
 	CheckIfUserExist(ctx context.Context, userID int64) (bool, error)
-	FindCards(
+	FindPersonCards(
 		ctx context.Context,
 		table string,
 		data []string,
 		crterions []string,
 	) ([]card.PersonCard, error)
+	FindOrganizationCards(
+		ctx context.Context,
+		table string,
+		data []string,
+		crterions []string,
+	) ([]card.OrganizationCard, error)
 	ShowAllPersonalCards(ctx context.Context) (pc []card.PersonCard, err error)
 }
 
@@ -124,7 +130,7 @@ func (s *UserStorage) LeaveGroup(ctx context.Context, u *tgbotapi.User) error {
 	return nil
 }
 
-func (s *UserStorage) FindCards(
+func (s *UserStorage) FindPersonCards(
 	ctx context.Context,
 	table string,
 	data []string,
@@ -163,18 +169,52 @@ func (s *UserStorage) FindCards(
 
 	cards, err = pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
 	if err != nil {
-		// if errors.Is(err, pgx.ErrNoRows) {
-		// 	logger.Info(
-		// 		"Не найдено ни одной записи по данному запросу",
-		// 	)
-		// 	return nil, err
-		// }
-		// if errors.Is(err, pgx.ErrTooManyRows) {
-		// 	logger.Info(
-		// 		"Найдено слишком много записей",
-		// 	)
-		// 	return nil, err
-		// }
+		logger.Error("Ошибка при конвертации строк в структуру", "ERROR", err)
+		return nil, err
+	}
+
+	return cards, nil
+}
+
+func (s *UserStorage) FindOrganizationCards(
+	ctx context.Context,
+	table string,
+	data []string,
+	criterions []string,
+) ([]card.OrganizationCard, error) {
+	if len(criterions) == 0 {
+		return nil, errors.New("at least one criterion is required")
+	}
+
+	var query string
+	var args []interface{}
+
+	if len(criterions) == 1 {
+		query = fmt.Sprintf("SELECT * FROM %s WHERE %s ILIKE $1", table, criterions[0])
+		args = append(args, "%"+data[0]+"%")
+	} else {
+		query = fmt.Sprintf("SELECT * FROM %s WHERE ", table)
+		for i, criterion := range criterions {
+			if i > 0 {
+				query += " AND "
+			}
+			query += fmt.Sprintf("%s ILIKE $%d", criterion, i+1)
+			args = append(args, "%"+data[i]+"%")
+		}
+	}
+
+	rows, err := s.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	logger.Info(fmt.Sprintf("\nQuery:\n%s\nData:\n%v", dbutils.FormatQuery(query), data))
+
+	var cards []card.OrganizationCard
+
+	cards, err = pgx.CollectRows(rows, pgx.RowToStructByName[card.OrganizationCard])
+	if err != nil {
 		logger.Error("Ошибка при конвертации строк в структуру", "ERROR", err)
 		return nil, err
 	}
@@ -199,18 +239,6 @@ func (s *UserStorage) ShowAllPersonalCards(
 
 	cards, err = pgx.CollectRows(rows, pgx.RowToStructByName[card.PersonCard])
 	if err != nil {
-		// if errors.Is(err, pgx.ErrNoRows) {
-		// 	logger.Info(
-		// 		"Не найдено ни одной записи по данному запросу",
-		// 	)
-		// 	return nil, err
-		// }
-		// if errors.Is(err, pgx.ErrTooManyRows) {
-		// 	logger.Info(
-		// 		"Найдено слишком много записей",
-		// 	)
-		// 	return nil, err
-		// }
 		logger.Error("Ошибка при конвертации строк в структуру", "ERROR", err)
 		return nil, err
 	}

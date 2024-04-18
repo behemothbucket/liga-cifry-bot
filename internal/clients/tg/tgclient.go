@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
 	"sync"
 	"telegram-bot/internal/helpers/dbutils"
-	"telegram-bot/internal/helpers/markdown"
 	"telegram-bot/internal/helpers/tgfile"
 	"telegram-bot/internal/logger"
 	"telegram-bot/internal/model/dialog"
@@ -49,9 +47,9 @@ func New(tokenGetter TokenGetter) (*Client, error) {
 }
 
 func (c *Client) SendMessageWithMarkup(message dialog.Message) error {
-	text := markdown.EscapeForMarkdown(message.Text)
-	msg := tgbotapi.NewMessage(message.ChatID, text)
-	msg.ParseMode = "MarkdownV2"
+	// text := markdown.EscapeForMarkdown(message.Text)
+	msg := tgbotapi.NewMessage(message.ChatID, message.Text)
+	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = message.Markup
 	_, err := c.client.Send(msg)
 	if err != nil {
@@ -60,15 +58,12 @@ func (c *Client) SendMessageWithMarkup(message dialog.Message) error {
 	return nil
 }
 
-func (c *Client) SendMessage(msg dialog.Message, msgType string) error {
-	switch msgType {
+func (c *Client) SendMessage(msg dialog.Message) error {
+	switch msg.Type {
 	case "SendMessageWithMarkup":
 		return c.SendMessageWithMarkup(msg)
 	case "SendCards":
-		for _, card := range msg.Cards {
-			msg.Text = card
-			c.DeferMessage(msg)
-		}
+		c.SendCards(msg)
 		return nil
 	case "SendFile":
 		return c.SendFile(msg)
@@ -76,21 +71,28 @@ func (c *Client) SendMessage(msg dialog.Message, msgType string) error {
 		return c.SendMedia(msg)
 	case "SendMediaGroup":
 		return c.SendMediaGroup(msg)
-	case "SendDBDump":
-		return c.SendDBDump()
 	case "EditTextAndMarkup":
 		return c.EditTextAndMarkup(msg)
 	case "EditMarkup":
 		return c.EditMarkup(msg)
 	default:
-		text := markdown.EscapeForMarkdown(msg.Text)
-		msg := tgbotapi.NewMessage(msg.ChatID, text)
-		msg.ParseMode = "MarkdownV2"
+		// text := markdown.EscapeForMarkdown(msg.Text)
+		msg := tgbotapi.NewMessage(msg.ChatID, msg.Text)
+		msg.ParseMode = "MarHTMLL"
 		_, err := c.client.Send(msg)
 		if err != nil {
 			return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
 		}
 		return nil
+	}
+}
+
+func (c *Client) SendCards(msg dialog.Message) {
+	cards := msg.Cards
+	for _, card := range cards {
+		msg.Text = card
+		msg.Type = "SendMessageWithMarkup"
+		c.DeferMessage(msg)
 	}
 }
 
@@ -106,7 +108,7 @@ func (c *Client) SendFile(msg dialog.Message) error {
 }
 
 func (c *Client) SendMedia(msg dialog.Message) error {
-	fileConfig := tgbotapi.NewPhoto(msg.ChatID, msg.Photo)
+	fileConfig := tgbotapi.NewPhoto(msg.ChatID, msg.File)
 	fileConfig.Caption = msg.Caption
 	_, err := c.client.Send(fileConfig)
 	if err != nil {
@@ -153,14 +155,9 @@ func (c *Client) SendDBDump() error {
 		ChatID:  id,
 		File:    dbDump,
 		Caption: "Бэкап БД",
-		Type:    "SendDBDump",
+		Type:    "SendFile",
 	}
 	c.DeferMessage(msg)
-
-	// TODO обрабатывать ошибку отправки файла
-	if err != nil {
-		logger.Error("Ошибка при отправке файла в телеграм:", err)
-	}
 
 	logger.Info(fmt.Sprintf("Файл отправлен %s", filePath))
 
@@ -185,7 +182,7 @@ func (c *Client) StartDBJob(ctx context.Context) {
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
-				gocron.NewAtTime(17, 0, 50),
+				gocron.NewAtTime(18, 18, 10),
 			),
 		), gocron.NewTask(c.SendDBDump),
 	)
@@ -217,17 +214,40 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 
 	var wg sync.WaitGroup
 
-	for update := range updates {
+	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("Приложение завершило работу")
+			wg.Wait()
 			return
-		default:
+		case update := <-updates:
 			wg.Add(1)
-			go func(update tgbotapi.Update) {
-				defer wg.Done()
-				ProcessingMessages(update, c, msgModel)
-			}(update)
+
+			if update.Message != nil {
+				if update.Message.IsCommand() {
+					logger.Info(
+						fmt.Sprintf(
+							"[@%s | %v] %s",
+							update.Message.From.UserName,
+							update.Message.From.ID,
+							update.Message.Text),
+					)
+					go func(update tgbotapi.Update) {
+						defer wg.Done()
+						ProcessingCommands(update, c, msgModel)
+					}(update)
+				} else {
+					go func(update tgbotapi.Update) {
+						defer wg.Done()
+						ProcessingMessages(update, c, msgModel)
+					}(update)
+				}
+			} else {
+				go func(update tgbotapi.Update) {
+					defer wg.Done()
+					ProcessingMessages(update, c, msgModel)
+				}(update)
+			}
 		}
 	}
 }
@@ -249,35 +269,28 @@ func (c *Client) SendDeferredMessages() {
 	timer := time.NewTicker(sendInterval)
 
 	for range timer.C {
-		var cases []reflect.SelectCase
-
-		for chatId, ch := range deferredMessages {
-			if userCanReceiveMessage(chatId) && len(ch) > 0 {
-				sc := reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
-				cases = append(cases, sc)
-			}
-		}
-
-		if len(cases) > 0 {
-			_, value, ok := reflect.Select(cases)
-
-			if ok {
-				dm := value.Interface().(dialog.Message)
-				err := c.SendMessage(dm, dm.Type)
-				if err != nil {
-					errMsg := err.Error()
-					if errMsg == "Forbidden: bot was blocked by the user" ||
-						errMsg == "Forbidden: user is deactivated" {
-						logger.Info(fmt.Sprintf(
-							"Пользователь [%s | @%s] заблокировал бота или был деактивирован",
-							dm.FirstName,
-							dm.UserName,
-						))
-					} else {
-						logger.Error("Ошибка при обработке сообщения:", "ERROR", errMsg)
+		for chatID, ch := range deferredMessages {
+			if userCanReceiveMessage(chatID) && len(ch) > 0 {
+				select {
+				case msg := <-ch:
+					err := c.SendMessage(msg)
+					if err != nil {
+						errMsg := err.Error()
+						if errMsg == "Forbidden: bot was blocked by the user" ||
+							errMsg == "Forbidden: user is deactivated" {
+							logger.Info(fmt.Sprintf(
+								"Пользователь [%s | @%s] заблокировал бота или был деактивирован",
+								msg.FirstName,
+								msg.UserName,
+							))
+						} else {
+							logger.Error("Ошибка при обработке сообщения:", "ERROR", errMsg)
+						}
 					}
+					lastMessageTimes[msg.ChatID] = time.Now().UnixNano()
+				default:
+					logger.Debug("Канал пустой...")
 				}
-				lastMessageTimes[dm.ChatID] = time.Now().UnixNano()
 			}
 		}
 	}
@@ -296,19 +309,10 @@ func ProcessingMessages(
 	msgModel *dialog.Model,
 ) {
 	if update.Message != nil {
-		logger.Info(
-			fmt.Sprintf(
-				"[@%s | %v] %s",
-				update.Message.From.UserName,
-				update.Message.From.ID,
-				update.Message.Text),
-		)
 		msgModel.HandleMessage(dialog.Message{
 			Text:           update.Message.Text,
 			ChatID:         update.Message.Chat.ID,
 			IsCommand:      update.Message.IsCommand(),
-			BotName:        c.client.Self.UserName,
-			FirstName:      update.Message.From.FirstName,
 			NewChatMembers: update.Message.NewChatMembers,
 			LeftChatMember: update.Message.LeftChatMember,
 		})
@@ -324,6 +328,20 @@ func ProcessingMessages(
 			ChatID:        update.CallbackQuery.Message.Chat.ID,
 		})
 	}
+}
+
+func ProcessingCommands(
+	update tgbotapi.Update,
+	c *Client,
+	msgModel *dialog.Model,
+) {
+	msgModel.HandleCommands(dialog.Message{
+		Text:      update.Message.Text,
+		BotName:   c.client.Self.UserName,
+		FirstName: update.Message.From.FirstName,
+		ChatID:    update.Message.Chat.ID,
+		MsgID:     update.Message.MessageID,
+	})
 }
 
 // isDuplicateEdit Проверка на действия, которые не приведут к изменениям
@@ -357,10 +375,10 @@ func (c *Client) EditTextAndMarkup(
 	if !isDuplicateEdit(msg, false) {
 		chatID := msg.ChatID
 		msgID := msg.MsgID
-		text := markdown.EscapeForMarkdown(msg.NewText)
+		// text := markdown.EscapeForMarkdown(msg.Text)
 
-		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, msg.Markup)
-		msg.ParseMode = "MarkdownV2"
+		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, msg.Text, msg.Markup)
+		msg.ParseMode = "HTML"
 		_, err := c.client.Send(msg)
 		if err != nil {
 			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)

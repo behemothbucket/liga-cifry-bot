@@ -17,12 +17,12 @@ import (
 
 var (
 	txtMainMenu       = "Привет, %v.\nМогу помочь найти карточку компетенций или организации."
-	txtUnknownCommand = "К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start"
+	txtUnknownMessage = "К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start"
 	txtCardNotFound   = "Ничего не найдено... 🤷‍♂️"
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
-	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
+	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите <b>Применить</b> ✅."
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
-	txtCriteriaInput   = "Пожалуйста, введите *%v*."
+	txtCriteriaInput   = "Пожалуйста, введите <b>%v</b>."
 )
 
 // Область "Константы и переменные": конец.
@@ -31,11 +31,12 @@ var (
 
 // MessageSender Интерфейс для работы с сообщениями.
 type MessageSender interface {
-	SendMessage(msg Message, typeMessage string) error
+	SendMessage(msg Message) error
 	SendMessageWithMarkup(msg Message) error
 	SendFile(msg Message) error
 	SendMedia(msg Message) error
 	SendMediaGroup(msg Message) error
+	SendCards(msg Message)
 	EditTextAndMarkup(msg Message) error
 	EditMarkup(msg Message) error
 	DeferMessage(msg Message)
@@ -85,7 +86,6 @@ type Message struct {
 	LeftChatMember *tgbotapi.User
 	Markup         tgbotapi.InlineKeyboardMarkup
 	File           *tgbotapi.FileReader
-	Photo          tgbotapi.RequestFileData
 }
 
 func (m *Model) GetCtx() context.Context {
@@ -102,8 +102,6 @@ func (m *Model) HandleMessage(msg Message) {
 	defer cancel()
 
 	switch {
-	case msg.IsCommand:
-		HandleBotCommands(ctx, m, msg)
 	case len(msg.NewChatMembers) != 0:
 		if err := m.storage.JoinGroup(ctx, &msg.NewChatMembers[0]); err != nil {
 			logger.Error("Ошибка в добавлении нового пользователя", "ERROR", err)
@@ -120,28 +118,29 @@ func (m *Model) HandleMessage(msg Message) {
 				"Не найдено ни одной записи по данному запросу",
 			)
 			msg.Text = txtCardNotFound
-			msg.Markup = MarkupCancelMenu
+			msg.Markup = MarkupCardMenu
 			msg.Type = "SendMessageWithMarkup"
 			m.tgClient.DeferMessage(msg)
 		}
 		if err != nil {
 			logger.Error("Ошибка в поиске карты", "ERROR", err)
 		}
-		logger.Debug(fmt.Sprintf("%v", cards))
 		msg.Cards = cards
 		msg.Markup = MarkupCardMenu
-		msg.Type = "SendMessageWithMarkup"
-		m.search.Disable()
+		msg.Type = "SendCards"
 		m.tgClient.DeferMessage(msg)
+		m.search.Disable()
 	default:
-		msg.Text = txtUnknownCommand
+		msg.Text = txtUnknownMessage
 		msg.Type = ""
 		m.tgClient.DeferMessage(msg)
 	}
 }
 
 // CheckBotCommands распознавание стандартных команд бота.
-func HandleBotCommands(ctx context.Context, m *Model, msg Message) {
+func (m *Model) HandleCommands(msg Message) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	// TEST
 	testChatID := int64(5587823077)
 	// testChatID := int64(155401792)
@@ -159,9 +158,10 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) {
 		if err != nil {
 			logger.Error("Ошибка в сборе всех персональных карточек", "ERROR", err)
 		}
-		cards := card.FormatCards(rawCards)
+		cards := card.FormatPersonCards(rawCards)
 		msg.Cards = cards
-		msg.Type = "SendMessageWithMarkup"
+		msg.Markup = MarkupCardMenu
+		msg.Type = "SendCards"
 		m.tgClient.DeferMessage(msg)
 	case "/dump":
 		if err := m.tgClient.SendDBDump(); err != nil {
@@ -180,6 +180,11 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) {
 		msg.FilePaths = paths
 		msg.ChatID = testChatID
 		msg.Caption = "Бэйби"
+		msg.Type = "SendMediaGroup"
+		m.tgClient.DeferMessage(msg)
+	default:
+		msg.Text = txtUnknownMessage
+		msg.Type = ""
 		m.tgClient.DeferMessage(msg)
 	}
 }
@@ -199,13 +204,13 @@ func (m *Model) HandleButton(msg Message) {
 	case BtnSearchPerson:
 		m.search.SetSearchScreen("personal_cards")
 		msg.Type = "EditTextAndMarkup"
-		msg.NewText = txtCriterionChoose
+		msg.Text = txtCriterionChoose
 		msg.Markup = MarkupSearchPersonMenu
 	case BtnSearchOrganization:
 		m.search.SetSearchScreen("organization_cards")
 		m.search.SetSearchScreen("personal_cards")
 		msg.Type = "EditTextAndMarkup"
-		msg.NewText = txtCriterionChoose
+		msg.Text = txtCriterionChoose
 		msg.Markup = MarkupSearchOrganizationMenu
 	case BtnApply:
 		lenCriterions := len(m.search.GetCriterions())
