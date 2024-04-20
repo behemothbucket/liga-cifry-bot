@@ -27,6 +27,7 @@ var (
 type MessageSender interface {
 	SendMessage(chatID int64, text string) error
 	SendMessageWithMarkup(chatID int64, text string, markup *tgbotapi.InlineKeyboardMarkup) error
+	SendKeyboard(chatID int64, text string, markup *tgbotapi.ReplyKeyboardMarkup) error
 	SendCards(chatID int64, cards []string) error
 	SendDBDump() error
 	StartDBJob(ctx context.Context)
@@ -95,6 +96,8 @@ func (m *Model) HandleMessage(msg Message) error {
 	defer cancel()
 
 	switch {
+	case msg.Text == "ФИО":
+		return m.tgClient.SendKeyboard(msg.ChatID, "TEST", &TestS)
 	case msg.IsCommand:
 		return HandleBotCommands(ctx, m, msg)
 	case len(msg.NewChatMembers) != 0:
@@ -225,6 +228,8 @@ func (m *Model) HandleButton(msg Message) error {
 			fmt.Sprintf(txtMainMenu, firstName),
 			&MarkupMainMenu,
 		)
+	case BtnTestReplyKeyboard:
+		return m.tgClient.SendKeyboard(msg.ChatID, txtCriterionChoose, &TestKeyboardMarkup)
 	case HandleCriterionButton(button, m.search):
 		searchScreen := m.search.GetSearchScreen()
 		markup := CreateSearchMenuMarkup(searchScreen)

@@ -20,6 +20,9 @@ func CreateMainMenuMarkup() tgbotapi.InlineKeyboardMarkup {
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(BtnSearchOrganization, BtnSearchOrganization),
 		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(BtnTestReplyKeyboard, BtnTestReplyKeyboard),
+		),
 	)
 }
 

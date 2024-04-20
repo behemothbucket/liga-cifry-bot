@@ -72,6 +72,21 @@ func (c *Client) SendMessageWithMarkup(
 	return nil
 }
 
+func (c *Client) SendKeyboard(
+	chatID int64,
+	text string,
+	markup *tgbotapi.ReplyKeyboardMarkup,
+) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "HTML"
+	msg.ReplyMarkup = markup
+	_, err := c.client.Send(msg)
+	if err != nil {
+		return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
+	}
+	return nil
+}
+
 func (c *Client) SendCards(chatID int64, cards []string) error {
 	for _, card := range cards {
 		msg := dialog.Message{

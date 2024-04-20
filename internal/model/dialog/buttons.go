@@ -34,7 +34,8 @@ var (
 	BtnCancelSearch       = "❌ Отменить поиск"
 	BtnApply              = "✅ Применить"
 	// btnLoadMore           = "⏬ Загрузить еще 5"
-	BtnChosenPrefix = "☑️ "
+	BtnChosenPrefix      = "☑️ "
+	BtnTestReplyKeyboard = "TEST"
 )
 
 func HandleCriterionButton(button string, se search.Engine) string {
