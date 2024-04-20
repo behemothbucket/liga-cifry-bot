@@ -74,12 +74,11 @@ func (c *Client) SendMessageWithMarkup(
 
 func (c *Client) SendCards(chatID int64, cards []string) error {
 	for _, card := range cards {
-		msg := dialog.Message{
+		c.DeferMessageWithMarkup(dialog.Message{
 			ChatID: chatID,
 			Text:   card,
 			Markup: &dialog.MarkupCardMenu,
-		}
-		c.DeferMessageWithMarkup(msg)
+		})
 	}
 	return nil
 }
@@ -227,6 +226,19 @@ func (c *Client) DeferMessageWithMarkup(msg dialog.Message) {
 	deferredMessages[chatId] <- msg
 }
 
+func (c *Client) DeferMessage(msg dialog.Message) {
+	chatId := msg.ChatID
+
+	c.Lock()
+	defer c.Unlock()
+
+	if _, ok := deferredMessages[chatId]; !ok {
+		deferredMessages[chatId] = make(chan dialog.Message, 100)
+	}
+
+	deferredMessages[chatId] <- msg
+}
+
 func (c *Client) SendDeferredMessages() {
 	timer := time.NewTicker(sendInterval)
 	defer timer.Stop()
@@ -236,13 +248,19 @@ func (c *Client) SendDeferredMessages() {
 			if userCanReceiveMessage(chatID) && len(ch) > 0 {
 				select {
 				case dm := <-ch:
-					err := c.SendMessageWithMarkup(dm.ChatID, dm.Text, dm.Markup)
-					if err != nil {
-						logger.Error("Ошибка в отправке отложенного сообщения", "ERROR", err)
+					if dm.Markup != nil {
+						err := c.SendMessageWithMarkup(dm.ChatID, dm.Text, dm.Markup)
+						if err != nil {
+							logger.Error("Ошибка в отправке отложенного сообщения", "ERROR", err)
+						}
+					} else {
+						err := c.SendMessage(dm.ChatID, dm.Text)
+						if err != nil {
+							logger.Error("Ошибка в отправке отложенного сообщения без разметки", "ERROR", err)
+						}
 					}
 					lastMessageTimes[dm.ChatID] = time.Now().UnixNano()
 				default:
-					// Нет доступных сообщений для отправки
 					logger.Debug("Нет сообщений для отправки...")
 				}
 			}

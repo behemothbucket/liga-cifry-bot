@@ -34,6 +34,7 @@ type MessageSender interface {
 	SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error
 	SendMediaGroup(chatID int64, paths []string, caption string) error
 	DeferMessageWithMarkup(msg Message)
+	DeferMessage(msg Message)
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
@@ -117,7 +118,11 @@ func (m *Model) HandleMessage(msg Message) error {
 		m.search.Disable()
 		return m.tgClient.SendCards(msg.ChatID, cards)
 	default:
-		return m.tgClient.SendMessage(msg.ChatID, txtUnknownMessage)
+		m.tgClient.DeferMessage(Message{
+			ChatID: msg.ChatID,
+			Text:   txtUnknownMessage,
+		})
+		return nil
 	}
 }
 
