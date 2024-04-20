@@ -15,18 +15,18 @@ import (
 
 var (
 	txtMainMenu        = "👋 Привет, <b>%v</b>.\nМогу помочь найти карточку компетенций или организации."
-	txtUnknownMessage  = "💬 <b>К сожалению, данная команда мне неизвестна.</b>\n\nДля начала работы введите\n<u>/start</u>"
+	txtUnknownMessage  = "💬 <b>К сожалению, данная команда мне неизвестна.</b>\n\nДля начала работы введите\n<u>/start</u>."
 	txtCardNotFound    = "Ничего не найдено... 🤷‍♂️"
-	txtCriterionChoose = "💬 <b>Выберите критерии поиска.</b>"
-	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
-	txtCriteriaInput   = "Пожалуйста, введите <b>%v</b>."
+	txtCriterionChoose = "💬 <b>Выберите критерии поиска и нажмите Применить ✅</b>"
+	txtNoCriteria      = "❗️<b>Не выбрано ни одного критерия поиска</b>"
+	txtCriteriaInput   = "Пожалуйста, введите <b>%v</b>"
 	themeLink          = "<a href='https://t.me/addtheme/Liga_Cifry'>🎨 Офицальная цветовая тема Лиги Цифры!</a>"
 )
 
 // MessageSender Интерфейс для работы с сообщениями.
 type MessageSender interface {
 	SendMessage(chatID int64, text string) error
-	SendMessageWithMarkup(chatID int64, text string, markup *tgbotapi.InlineKeyboardMarkup) error
+	SendMessageWithMarkup(chatID int64, text string, markup *tgbotapi.ReplyKeyboardMarkup) error
 	SendKeyboard(chatID int64, text string, markup *tgbotapi.ReplyKeyboardMarkup) error
 	SendCards(chatID int64, cards []string) error
 	SendDBDump() error
@@ -35,12 +35,6 @@ type MessageSender interface {
 	SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error
 	SendMediaGroup(chatID int64, paths []string, caption string) error
 	DeferMessageWithMarkup(msg Message)
-	EditTextAndMarkup(
-		msg Message,
-		newText string,
-		newMarkup *tgbotapi.InlineKeyboardMarkup,
-	) error
-	EditMarkup(msg Message, markup *tgbotapi.InlineKeyboardMarkup) error
 }
 
 // Model Модель бота (клиент, хранилище, поиск)
@@ -71,7 +65,7 @@ type Message struct {
 	Text           string
 	Data           string
 	MsgID          int
-	Markup         *tgbotapi.InlineKeyboardMarkup
+	Markup         *tgbotapi.ReplyKeyboardMarkup
 	ChatID         int64
 	UserID         int64
 	BotName        string
@@ -95,23 +89,27 @@ func (m *Model) HandleMessage(msg Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	switch {
-	case msg.Text == "ФИО":
-		return m.tgClient.SendKeyboard(msg.ChatID, "TEST", &TestS)
-	case msg.IsCommand:
-		return HandleBotCommands(ctx, m, msg)
-	case len(msg.NewChatMembers) != 0:
+	if msg.IsCommand {
+		return handleCommand(ctx, m, msg)
+	}
+
+	if len(msg.NewChatMembers) != 0 {
 		return m.storage.JoinGroup(ctx, &msg.NewChatMembers[0])
-	case msg.LeftChatMember != nil:
+	}
+
+	if msg.LeftChatMember != nil {
 		return m.storage.LeaveGroup(ctx, msg.LeftChatMember)
-	case m.search.IsEnabled():
+	}
+
+	if m.search.IsEnabled() {
 		m.search.AddSearchData(msg.Text)
 		cards, err := m.search.ProcessCards(ctx, m.storage)
 		if len(cards) == 0 {
-			return m.tgClient.SendMessageWithMarkup(
+			m.search.Disable()
+			return m.tgClient.SendKeyboard(
 				msg.ChatID,
 				txtCardNotFound,
-				&MarkupCardMenu,
+				&CardKeyboard,
 			)
 		}
 		if err != nil {
@@ -119,13 +117,17 @@ func (m *Model) HandleMessage(msg Message) error {
 		}
 		m.search.Disable()
 		return m.tgClient.SendCards(msg.ChatID, cards)
-	default:
-		return m.tgClient.SendMessage(msg.ChatID, txtUnknownMessage)
 	}
+
+	if isButton, err := handleButton(msg, m); err != nil || isButton {
+		return err
+	}
+
+	return m.tgClient.SendMessage(msg.ChatID, txtUnknownMessage)
 }
 
 // CheckBotCommands распознавание стандартных команд бота.
-func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
+func handleCommand(ctx context.Context, m *Model, msg Message) error {
 	// TEST
 	testChatID := int64(5587823077)
 	// testChatID := int64(155401792)
@@ -134,10 +136,11 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
 		if m.search.IsEnabled() {
 			m.search.Disable()
 		}
-		return m.tgClient.SendMessageWithMarkup(
+		ResetCriteriaButtons()
+		return m.tgClient.SendKeyboard(
 			msg.ChatID,
 			fmt.Sprintf(txtMainMenu, msg.FirstName),
-			&MarkupMainMenu,
+			&MainKeyboard,
 		)
 	case "/theme":
 		return m.tgClient.SendMessage(msg.ChatID, themeLink)
@@ -163,42 +166,29 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
 	return nil
 }
 
-func (m *Model) HandleButton(msg Message) error {
-	button := msg.CallbackQuery.Data
-	firstName := msg.CallbackQuery.From.FirstName
-	previousMarkup := msg.CallbackQuery.Message.ReplyMarkup
+func handleButton(msg Message, m *Model) (bool, error) {
+	button := msg.Text
+	firstName := msg.FirstName
 
 	switch button {
-	case BtnBack:
+	case BtnBack, BtnMenu:
 		m.search.Disable()
 		ResetCriteriaButtons()
-		return m.tgClient.EditTextAndMarkup(
-			msg,
-			fmt.Sprintf(txtMainMenu, firstName),
-			&MarkupMainMenu,
+		return true, m.tgClient.SendKeyboard(
+			msg.ChatID,
+			fmt.Sprintf(txtMainMenu, msg.FirstName),
+			&MainKeyboard,
 		)
 	case BtnSearchPerson:
 		m.search.SetSearchScreen("personal_cards")
-		return m.tgClient.EditTextAndMarkup(
-			msg,
-			txtCriterionChoose,
-			&MarkupSearchPersonMenu,
-		)
+		return true, m.tgClient.SendKeyboard(msg.ChatID, txtCriterionChoose, &PersonKeyboard)
 	case BtnSearchOrganization:
 		m.search.SetSearchScreen("organization_cards")
-		return m.tgClient.EditTextAndMarkup(
-			msg,
-			txtCriterionChoose,
-			&MarkupSearchOrganizationMenu,
-		)
+		return true, m.tgClient.SendKeyboard(msg.ChatID, txtCriterionChoose, &OrganizationKeyboard)
 	case BtnApply:
 		lenCriterions := len(m.search.GetCriterions())
 		if lenCriterions == 0 {
-			return m.tgClient.EditTextAndMarkup(
-				msg,
-				txtNoCriteria,
-				previousMarkup,
-			)
+			return true, m.tgClient.SendMessage(msg.ChatID, txtNoCriteria)
 			// TEST
 		} else if lenCriterions == 1 {
 			m.search.Enable()
@@ -206,38 +196,29 @@ func (m *Model) HandleButton(msg Message) error {
 			for key := range m.search.GetCriterions() {
 				alias = key
 			}
-			return m.tgClient.EditTextAndMarkup(
-				msg,
+			return true, m.tgClient.SendKeyboard(
+				msg.ChatID,
 				fmt.Sprintf(txtCriteriaInput, alias),
-				&MarkupCancelMenu,
+				&CancelKeyboard,
 			)
 		}
 	case BtnCancelSearch:
 		m.search.Disable()
 		ResetCriteriaButtons()
-		return m.tgClient.SendMessageWithMarkup(
+		return true, m.tgClient.SendMessageWithMarkup(
 			msg.ChatID,
 			fmt.Sprintf(txtMainMenu, firstName),
-			&MarkupMainMenu,
+			&MainKeyboard,
 		)
-	case BtnMenu:
-		m.search.Disable()
-		ResetCriteriaButtons()
-		return m.tgClient.SendMessageWithMarkup(
-			msg.ChatID,
-			fmt.Sprintf(txtMainMenu, firstName),
-			&MarkupMainMenu,
-		)
-	case BtnTestReplyKeyboard:
-		return m.tgClient.SendKeyboard(msg.ChatID, txtCriterionChoose, &TestKeyboardMarkup)
 	case HandleCriterionButton(button, m.search):
 		searchScreen := m.search.GetSearchScreen()
-		markup := CreateSearchMenuMarkup(searchScreen)
-		return m.tgClient.EditMarkup(
-			msg,
+		markup := CreateSearchMenu(searchScreen)
+		return true, m.tgClient.SendKeyboard(
+			msg.ChatID,
+			txtCriterionChoose,
 			&markup,
 		)
 	}
 
-	return nil
+	return false, nil
 }

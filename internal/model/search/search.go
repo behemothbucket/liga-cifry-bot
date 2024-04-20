@@ -42,7 +42,6 @@ func (s *Search) ProcessCards(
 	for _, v := range s.GetCriterions() {
 		criteria = v
 	}
-
 	searchScreen := s.GetSearchScreen()
 	searchData := s.GetSearchData()
 

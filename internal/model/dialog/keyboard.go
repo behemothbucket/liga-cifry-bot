@@ -5,51 +5,73 @@ import (
 )
 
 var (
-	TestKeyboardMarkup = CreateKeyboardMarkup("personal_cards")
-	TestS              = CreateKeyboardMarkupTest()
-
-	BtnKeyboard = map[string][]string{
-		"personal_cards": {
-			"ФИО",
-			"Город",
-			"Должность",
-			"Экспертные компетенции",
-			"Направления сотрудничества",
-			"Контакты",
-		},
-		"organization_cards": {
-			"Организация",
-			"Структурное подразделение",
-			"«Приоритет-2030»",
-			"Город",
-			"Членство в консорциуме",
-			"consortium_membership",
-			"Разработки отвечественного ПО",
-			"Лабораторные площадки и НОЦ",
-		},
-	}
+	PersonKeyboard       = CreateSearchMenu("personal_cards")
+	OrganizationKeyboard = CreateSearchMenu("organization_cards")
+	MainKeyboard         = CreateMainMenu()
+	CardKeyboard         = CreateCardMenu()
+	CancelKeyboard       = CreateCancelMenu()
 )
 
-func CreateKeyboardMarkup(searchScreen string) tgbotapi.ReplyKeyboardMarkup {
+func CreateSearchMenu(searchScreen string) tgbotapi.ReplyKeyboardMarkup {
 	var rows [][]tgbotapi.KeyboardButton
 
-	for _, btn := range BtnKeyboard[searchScreen] {
-		row := tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(btn),
-		)
+	buttons := BtnCriterions[searchScreen]
+
+	for i := 0; i < len(buttons); i += 2 {
+		var row []tgbotapi.KeyboardButton
+		if len(rows) == 0 && i+1 < len(buttons) {
+			row = append(row, tgbotapi.NewKeyboardButton(buttons[i][0]))
+			row = append(row, tgbotapi.NewKeyboardButton(buttons[i+1][0]))
+			row = append(row, tgbotapi.NewKeyboardButton(buttons[i+2][0]))
+			i++
+		} else {
+			if i < len(buttons) {
+				row = append(row, tgbotapi.NewKeyboardButton(buttons[i][0]))
+			}
+			if i+1 < len(buttons) {
+				row = append(row, tgbotapi.NewKeyboardButton(buttons[i+1][0]))
+			}
+		}
 		rows = append(rows, row)
 	}
 
+	rows = append(rows, []tgbotapi.KeyboardButton{
+		tgbotapi.NewKeyboardButton(BtnBack),
+		tgbotapi.NewKeyboardButton(BtnApply),
+	})
+
 	keyboard := tgbotapi.NewReplyKeyboard(rows...)
-	keyboard.InputFieldPlaceholder = "TEST"
 	keyboard.ResizeKeyboard = true
 	return keyboard
 }
 
-func CreateKeyboardMarkupTest() tgbotapi.ReplyKeyboardMarkup {
+func CreateMainMenu() tgbotapi.ReplyKeyboardMarkup {
 	return tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("TEST"),
+			tgbotapi.NewKeyboardButton(BtnSearchPerson),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(BtnSearchOrganization),
 		),
 	)
+}
+
+func CreateCardMenu() tgbotapi.ReplyKeyboardMarkup {
+	keyboard := tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(BtnMenu),
+		),
+	)
+	keyboard.OneTimeKeyboard = true
+	return keyboard
+}
+
+func CreateCancelMenu() tgbotapi.ReplyKeyboardMarkup {
+	keyboard := tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(BtnCancelSearch),
+		),
+	)
+	keyboard.OneTimeKeyboard = true
+	return keyboard
 }

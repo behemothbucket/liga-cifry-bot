@@ -60,7 +60,7 @@ func (c *Client) SendMessage(chatID int64, text string) error {
 func (c *Client) SendMessageWithMarkup(
 	chatID int64,
 	text string,
-	markup *tgbotapi.InlineKeyboardMarkup,
+	markup *tgbotapi.ReplyKeyboardMarkup,
 ) error {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "HTML"
@@ -88,11 +88,13 @@ func (c *Client) SendKeyboard(
 }
 
 func (c *Client) SendCards(chatID int64, cards []string) error {
-	for _, card := range cards {
+	for i, card := range cards {
 		msg := dialog.Message{
 			ChatID: chatID,
 			Text:   card,
-			Markup: &dialog.MarkupCardMenu,
+		}
+		if i == len(cards)-1 {
+			msg.Markup = &dialog.CardKeyboard
 		}
 		c.DeferMessageWithMarkup(msg)
 	}
@@ -242,6 +244,19 @@ func (c *Client) DeferMessageWithMarkup(msg dialog.Message) {
 	deferredMessages[chatId] <- msg
 }
 
+func (c *Client) DeferMessage(msg dialog.Message) {
+	chatId := msg.ChatID
+
+	c.Lock()
+	defer c.Unlock()
+
+	if _, ok := deferredMessages[chatId]; !ok {
+		deferredMessages[chatId] = make(chan dialog.Message, 100)
+	}
+
+	deferredMessages[chatId] <- msg
+}
+
 func (c *Client) SendDeferredMessages() {
 	timer := time.NewTicker(sendInterval)
 	defer timer.Stop()
@@ -251,13 +266,19 @@ func (c *Client) SendDeferredMessages() {
 			if userCanReceiveMessage(chatID) && len(ch) > 0 {
 				select {
 				case dm := <-ch:
-					err := c.SendMessageWithMarkup(dm.ChatID, dm.Text, dm.Markup)
-					if err != nil {
-						logger.Error("Ошибка в отправке отложенного сообщения", "ERROR", err)
+					if dm.Markup != nil {
+						err := c.SendMessageWithMarkup(dm.ChatID, dm.Text, dm.Markup)
+						if err != nil {
+							logger.Error("Ошибка в отправке отложенного сообщения", "ERROR", err)
+						}
+					} else {
+						err := c.SendMessage(dm.ChatID, dm.Text)
+						if err != nil {
+							logger.Error("Ошибка в отправке отложенного сообщения без разметки", "ERROR", err)
+						}
 					}
 					lastMessageTimes[dm.ChatID] = time.Now().UnixNano()
 				default:
-					// Нет доступных сообщений для отправки
 					logger.Debug("Нет сообщений для отправки...")
 				}
 			}
@@ -286,13 +307,12 @@ func ProcessingMessages(
 				update.Message.Text,
 			),
 		)
-
 		err := msgModel.HandleMessage(dialog.Message{
 			Text:           update.Message.Text,
 			ChatID:         update.Message.Chat.ID,
 			MsgID:          update.Message.MessageID,
-			IsCommand:      update.Message.IsCommand(),
 			BotName:        c.client.Self.UserName,
+			IsCommand:      update.Message.IsCommand(),
 			FirstName:      update.Message.From.FirstName,
 			NewChatMembers: update.Message.NewChatMembers,
 			LeftChatMember: update.Message.LeftChatMember,
@@ -310,82 +330,5 @@ func ProcessingMessages(
 				logger.Error("Ошибка при обработке сообщения:", "ERROR", errMsg)
 			}
 		}
-	} else if update.CallbackQuery != nil {
-		logger.Info(fmt.Sprintf("[@%s][%v] Callback: %s", update.CallbackQuery.From.UserName, update.CallbackQuery.From.ID, update.CallbackQuery.Data))
-		callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "")
-		if _, err := c.client.Request(callback); err != nil {
-			logger.Error("Ошибка Request callback:", "ERROR", err)
-		}
-		err := msgModel.HandleButton(dialog.Message{
-			ChatID:        update.CallbackQuery.Message.Chat.ID,
-			MsgID:         update.CallbackQuery.Message.MessageID,
-			CallbackQuery: update.CallbackQuery,
-			FirstName:     update.CallbackQuery.From.FirstName,
-			Text:          update.CallbackQuery.Message.Text,
-		})
-		if err != nil {
-			logger.Error("error handle button from callback:", "ERROR", err)
-		}
 	}
-}
-
-// isDuplicateEdit Проверка на действия, которые не приведут к изменениям
-func isDuplicateEdit(
-	msg dialog.Message,
-	text string,
-	markup *tgbotapi.InlineKeyboardMarkup,
-	onlyMarkup bool,
-) bool {
-	oldText := msg.Text
-	oldMarkup := msg.Markup
-
-	if onlyMarkup {
-		if markup == oldMarkup {
-			return true
-		}
-	} else {
-		if (markup == oldMarkup) && (text == oldText) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// EditTextAndMarkup Замена текста и инлайн-кнопок.
-// Их нажатие ожидает коллбек-ответ.
-func (c *Client) EditTextAndMarkup(
-	msg dialog.Message,
-	text string,
-	markup *tgbotapi.InlineKeyboardMarkup,
-) error {
-	if !isDuplicateEdit(msg, text, markup, false) {
-		chatID := msg.ChatID
-		msgID := msg.MsgID
-
-		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, text, *markup)
-		msg.ParseMode = "HTML"
-		_, err := c.client.Send(msg)
-		if err != nil {
-			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
-			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
-		}
-	}
-	return nil
-}
-
-// EditMarkup Замена инлайн-кнопок
-func (c *Client) EditMarkup(msg dialog.Message, markup *tgbotapi.InlineKeyboardMarkup) error {
-	if !isDuplicateEdit(msg, "", markup, true) {
-		chatID := msg.ChatID
-		msgID := msg.MsgID
-
-		_msg := tgbotapi.NewEditMessageReplyMarkup(chatID, msgID, *markup)
-		_, err := c.client.Send(_msg)
-		if err != nil {
-			logger.Error("Ошибка при редактировании текста и кнопок сообщения", "ERROR", err)
-			return errors.Wrap(err, "client.Send with text and inline-buttons edit")
-		}
-	}
-	return nil
 }

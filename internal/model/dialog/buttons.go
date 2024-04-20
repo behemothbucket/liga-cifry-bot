@@ -5,7 +5,6 @@ import (
 	"telegram-bot/internal/model/search"
 )
 
-// Кнопки.
 var (
 	BtnCriterions = map[string][][]string{
 		"personal_cards": {
@@ -34,8 +33,7 @@ var (
 	BtnCancelSearch       = "❌ Отменить поиск"
 	BtnApply              = "✅ Применить"
 	// btnLoadMore           = "⏬ Загрузить еще 5"
-	BtnChosenPrefix      = "☑️ "
-	BtnTestReplyKeyboard = "TEST"
+	BtnChosenPrefix = "☑️ "
 )
 
 func HandleCriterionButton(button string, se search.Engine) string {
@@ -43,7 +41,7 @@ func HandleCriterionButton(button string, se search.Engine) string {
 	buttons := BtnCriterions[searchScreen]
 
 	for i, expected := range buttons {
-		if button == expected[1] {
+		if button == expected[0] {
 			if strings.HasPrefix(buttons[i][0], BtnChosenPrefix) {
 				uncheckedButton := strings.TrimPrefix(
 					expected[0],
@@ -53,7 +51,7 @@ func HandleCriterionButton(button string, se search.Engine) string {
 				se.RemoveCriterion(BtnChosenPrefix + expected[0])
 			} else {
 				buttons[i][0] = BtnChosenPrefix + expected[0]
-				se.AddCriterion(buttons[i][0], button)
+				se.AddCriterion(buttons[i][0], buttons[i][1])
 			}
 			break
 		}
