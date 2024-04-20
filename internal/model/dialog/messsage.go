@@ -13,43 +13,33 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Область "Константы и переменные": начало.
-
 var (
-	txtMainMenu       = "Привет, %v.\nМогу помочь найти карточку компетенций или организации."
-	txtUnknownCommand = "К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start"
-	txtCardNotFound   = "Ничего не найдено... 🤷‍♂️"
-	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
-	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите *Применить* ✅."
+	txtMainMenu        = "👋 Привет, <b>%v</b>.\nМогу помочь найти карточку компетенций или организации."
+	txtUnknownMessage  = "💬 <b>К сожалению, данная команда мне неизвестна.</b>\n\nДля начала работы введите\n<u>/start</u>"
+	txtCardNotFound    = "Ничего не найдено... 🤷‍♂️"
+	txtCriterionChoose = "💬 <b>Выберите критерии поиска.</b>"
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
-	txtCriteriaInput   = "Пожалуйста, введите *%v*."
+	txtCriteriaInput   = "Пожалуйста, введите <b>%v</b>."
+	themeLink          = "<a href='https://t.me/addtheme/Liga_Cifry'>🎨 Офицальная цветовая тема Лиги Цифры!</a>"
 )
-
-// Область "Константы и переменные": конец.
-
-// Область "Внешний интерфейс": начало.
 
 // MessageSender Интерфейс для работы с сообщениями.
 type MessageSender interface {
-	SendMessage(msg Message) error
-	// SendMessageWithMarkup(
-	// 	chatID int64,
-	// 	text string,
-	// 	markup *tgbotapi.InlineKeyboardMarkup,
-	// ) DeferredMessage
-	// SendCards(chatID int64, cards []string) DeferredMessage
-	// SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) DeferredMessage
-	// SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) DeferredMessage
-	// SendMediaGroup(chatID int64, paths []string, caption string) DeferredMessage
+	SendMessage(chatID int64, text string) error
+	SendMessageWithMarkup(chatID int64, text string, markup *tgbotapi.InlineKeyboardMarkup) error
+	SendCards(chatID int64, cards []string) error
+	SendDBDump() error
+	StartDBJob(ctx context.Context)
+	SendFile(chatID int64, file *tgbotapi.FileReader, currentTime string) error
+	SendMedia(chatID int64, file *tgbotapi.FileReader, caption string) error
+	SendMediaGroup(chatID int64, paths []string, caption string) error
+	DeferMessageWithMarkup(msg Message)
 	EditTextAndMarkup(
 		msg Message,
 		newText string,
 		newMarkup *tgbotapi.InlineKeyboardMarkup,
 	) error
 	EditMarkup(msg Message, markup *tgbotapi.InlineKeyboardMarkup) error
-	DeferUpdate(update tgbotapi.Update)
-	StartDBJob(ctx context.Context)
-	SendDBDump() error
 }
 
 // Model Модель бота (клиент, хранилище, поиск)
@@ -78,11 +68,14 @@ func New(
 // Message Структура сообщения для обработки.
 type Message struct {
 	Text           string
+	Data           string
+	MsgID          int
+	Markup         *tgbotapi.InlineKeyboardMarkup
 	ChatID         int64
-	IsCommand      bool
+	UserID         int64
 	BotName        string
 	FirstName      string
-	MsgID          int
+	IsCommand      bool
 	CallbackQuery  *tgbotapi.CallbackQuery
 	NewChatMembers []tgbotapi.User
 	LeftChatMember *tgbotapi.User
@@ -106,15 +99,12 @@ func (m *Model) HandleMessage(msg Message) error {
 		return HandleBotCommands(ctx, m, msg)
 	case len(msg.NewChatMembers) != 0:
 		return m.storage.JoinGroup(ctx, &msg.NewChatMembers[0])
-	case msg.LeftChatMembers != nil:
-		return m.storage.LeaveGroup(ctx, msg.LeftChatMembers)
+	case msg.LeftChatMember != nil:
+		return m.storage.LeaveGroup(ctx, msg.LeftChatMember)
 	case m.search.IsEnabled():
 		m.search.AddSearchData(msg.Text)
 		cards, err := m.search.ProcessCards(ctx, m.storage)
-		if cards == nil {
-			logger.Info(
-				"Не найдено ни одной записи по данному запросу",
-			)
+		if len(cards) == 0 {
 			return m.tgClient.SendMessageWithMarkup(
 				msg.ChatID,
 				txtCardNotFound,
@@ -127,7 +117,7 @@ func (m *Model) HandleMessage(msg Message) error {
 		m.search.Disable()
 		return m.tgClient.SendCards(msg.ChatID, cards)
 	default:
-		return m.tgClient.SendMessage(msg.ChatID, txtUnknownCommand)
+		return m.tgClient.SendMessage(msg.ChatID, txtUnknownMessage)
 	}
 }
 
@@ -137,7 +127,7 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
 	testChatID := int64(5587823077)
 	// testChatID := int64(155401792)
 	switch msg.Text {
-	case "/start", fmt.Sprintf("/start@" + msg.BotName):
+	case "/start":
 		if m.search.IsEnabled() {
 			m.search.Disable()
 		}
@@ -146,12 +136,15 @@ func HandleBotCommands(ctx context.Context, m *Model, msg Message) error {
 			fmt.Sprintf(txtMainMenu, msg.FirstName),
 			&MarkupMainMenu,
 		)
+	case "/theme":
+		return m.tgClient.SendMessage(msg.ChatID, themeLink)
+
 	case "/allpersonalcards":
 		rawCards, err := m.storage.ShowAllPersonalCards(ctx)
 		if err != nil {
 			logger.Error("Ошибка в сборе всех персональных карточек", "ERROR", err)
 		}
-		cards := card.FormatCards(rawCards)
+		cards := card.FormatPersonCards(rawCards)
 		return m.tgClient.SendCards(msg.ChatID, cards)
 	case "/dump":
 		return m.tgClient.SendDBDump()

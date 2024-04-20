@@ -22,7 +22,6 @@ var (
 func main() {
 	logger.Info("Старт приложения")
 
-	// Create a new cancellable background context. Calling `cancel()` leads to the cancellation of the context
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -61,13 +60,11 @@ func main() {
 	// Старт обработчика отсроченных сообщений.
 	go tgClient.SendDeferredMessages()
 
-	// Pass cancellable context to goroutine
+	// Отправить контекст с отменой.
 	go tgClient.ListenUpdates(ctx, msgModel)
 
-	// Tell the user the bot is online
 	logger.Info("Start listening for updates. Press enter to stop...")
 
-	// Wait for a newline symbol, then cancel handling updates
 	_, err = bufio.NewReader(os.Stdin).ReadBytes('\n')
 	if err != nil {
 		logger.Info("Ошибка в принудительном (Enter) завершении программы", "ERROR", err)

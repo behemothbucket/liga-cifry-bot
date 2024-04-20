@@ -5,8 +5,6 @@ import "strings"
 var replacer = strings.NewReplacer(
 	"-",
 	"\\-",
-	"_",
-	"\\_",
 	"[",
 	"\\[",
 	"]",
@@ -17,8 +15,6 @@ var replacer = strings.NewReplacer(
 	"\\)",
 	"~",
 	"\\~",
-	"`",
-	"\\`",
 	">",
 	"\\>",
 	"#",
