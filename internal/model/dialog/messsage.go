@@ -13,21 +13,15 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Область "Константы и переменные": начало.
-
 var (
-	txtMainMenu       = "Привет, %v.\nМогу помочь найти карточку компетенций или организации."
-	txtUnknownMessage = "К сожалению, данная команда мне неизвестна.\nДля начала работы введите\n/start"
+	txtMainMenu       = "👋 Привет, <b>%v</b>.\nМогу помочь найти карточку компетенций или организации."
+	txtUnknownMessage = "💬 <b>К сожалению, данная команда мне неизвестна.</b>\n\nДля начала работы введите\n<u>/start</u>"
 	txtCardNotFound   = "Ничего не найдено... 🤷‍♂️"
 	// txtReportWait      = "Ищу 🔎\nПожалуйста, подождите..."
-	txtCriterionChoose = "Выберите критерии поиска для поиска, а затем нажмите <b>Применить</b> ✅."
+	txtCriterionChoose = "💬 <b>Выберите критерии поиска.</b>"
 	txtNoCriteria      = "❗️Не выбрано ни одного критерия поиска. Сначала выберите хотя-бы один критерий."
 	txtCriteriaInput   = "Пожалуйста, введите <b>%v</b>."
 )
-
-// Область "Константы и переменные": конец.
-
-// Область "Внешний интерфейс": начало.
 
 // MessageSender Интерфейс для работы с сообщениями.
 type MessageSender interface {
@@ -142,7 +136,7 @@ func (m *Model) HandleCommands(msg Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// TEST
-	testChatID := int64(5587823077)
+	// testChatID := int64(5587823077)
 	// testChatID := int64(155401792)
 	switch msg.Text {
 	case "/start", fmt.Sprintf("/start@" + msg.BotName):
@@ -170,7 +164,7 @@ func (m *Model) HandleCommands(msg Message) {
 	case "/cat":
 		file, _ := os.Open("./img/cat.jpg")
 		reader := tgbotapi.FileReader{Name: file.Name(), Reader: file}
-		msg.ChatID = testChatID
+		// msg.ChatID = testChatID
 		msg.File = &reader
 		msg.Caption = "Здарова ептить"
 		msg.Type = "SendMedia"
@@ -178,7 +172,7 @@ func (m *Model) HandleCommands(msg Message) {
 	case "/cats":
 		paths := []string{"./img/cat.jpg", "./img/cat.jpg", "./img/cat.jpg"}
 		msg.FilePaths = paths
-		msg.ChatID = testChatID
+		// msg.ChatID = testChatID
 		msg.Caption = "Бэйби"
 		msg.Type = "SendMediaGroup"
 		m.tgClient.DeferMessage(msg)
@@ -199,7 +193,7 @@ func (m *Model) HandleButton(msg Message) {
 		m.search.Disable()
 		ResetCriteriaButtons()
 		msg.Type = "EditTextAndMarkup"
-		msg.NewText = fmt.Sprintf(txtMainMenu, firstName)
+		msg.Text = fmt.Sprintf(txtMainMenu, firstName)
 		msg.Markup = MarkupMainMenu
 	case BtnSearchPerson:
 		m.search.SetSearchScreen("personal_cards")
@@ -208,7 +202,6 @@ func (m *Model) HandleButton(msg Message) {
 		msg.Markup = MarkupSearchPersonMenu
 	case BtnSearchOrganization:
 		m.search.SetSearchScreen("organization_cards")
-		m.search.SetSearchScreen("personal_cards")
 		msg.Type = "EditTextAndMarkup"
 		msg.Text = txtCriterionChoose
 		msg.Markup = MarkupSearchOrganizationMenu

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	sendCooldownPerUser = int64(time.Second / 3)
+	sendCooldownPerUser = int64(time.Second / 4)
 	sendInterval        = time.Second
 )
 
@@ -47,7 +47,6 @@ func New(tokenGetter TokenGetter) (*Client, error) {
 }
 
 func (c *Client) SendMessageWithMarkup(message dialog.Message) error {
-	// text := markdown.EscapeForMarkdown(message.Text)
 	msg := tgbotapi.NewMessage(message.ChatID, message.Text)
 	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = message.Markup
@@ -78,7 +77,7 @@ func (c *Client) SendMessage(msg dialog.Message) error {
 	default:
 		// text := markdown.EscapeForMarkdown(msg.Text)
 		msg := tgbotapi.NewMessage(msg.ChatID, msg.Text)
-		msg.ParseMode = "MarHTMLL"
+		msg.ParseMode = "HTML"
 		_, err := c.client.Send(msg)
 		if err != nil {
 			return errors.Wrap(err, "Ошибка отправки сообщения client.Send")
@@ -182,7 +181,7 @@ func (c *Client) StartDBJob(ctx context.Context) {
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
-				gocron.NewAtTime(18, 18, 10),
+				gocron.NewAtTime(20, 0, 0),
 			),
 		), gocron.NewTask(c.SendDBDump),
 	)
@@ -222,32 +221,10 @@ func (c *Client) ListenUpdates(ctx context.Context, msgModel *dialog.Model) {
 			return
 		case update := <-updates:
 			wg.Add(1)
-
-			if update.Message != nil {
-				if update.Message.IsCommand() {
-					logger.Info(
-						fmt.Sprintf(
-							"[@%s | %v] %s",
-							update.Message.From.UserName,
-							update.Message.From.ID,
-							update.Message.Text),
-					)
-					go func(update tgbotapi.Update) {
-						defer wg.Done()
-						ProcessingCommands(update, c, msgModel)
-					}(update)
-				} else {
-					go func(update tgbotapi.Update) {
-						defer wg.Done()
-						ProcessingMessages(update, c, msgModel)
-					}(update)
-				}
-			} else {
-				go func(update tgbotapi.Update) {
-					defer wg.Done()
-					ProcessingMessages(update, c, msgModel)
-				}(update)
-			}
+			go func(update tgbotapi.Update) {
+				defer wg.Done()
+				ProcessingMessages(update, c, msgModel)
+			}(update)
 		}
 	}
 }
@@ -375,7 +352,6 @@ func (c *Client) EditTextAndMarkup(
 	if !isDuplicateEdit(msg, false) {
 		chatID := msg.ChatID
 		msgID := msg.MsgID
-		// text := markdown.EscapeForMarkdown(msg.Text)
 
 		msg := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, msg.Text, msg.Markup)
 		msg.ParseMode = "HTML"

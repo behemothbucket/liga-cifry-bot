@@ -15,7 +15,7 @@ const personCardTemplate = `
 🏛 <b>Организация</b>
 %s
 
-🤝 <b>Должность</b>
+💼 <b>Должность</b>
 %s
 
 📝 <b>Экспертные компетенции</b>
@@ -32,6 +32,7 @@ const organizationCardTemplate = `
 %s
 
 🏢 <b>Структурное подразделение</b>
+%s
 
 📍<b>Город</b>
 %s
@@ -67,18 +68,18 @@ type PersonCard struct {
 }
 
 type OrganizationCard struct {
-	ID                   string
-	City                 string
-	Organization         string
-	ConsortiumMembership string
-	PossibleCooperation  string
-	Priority2030         string
-	Contacts             string
-	Software             string
-	LaboratoriesAndNOCs  string
+	ID                    string
+	Name                  string
+	StructuralSubdivision string
+	City                  string
+	PossibleCooperation   string
+	Priority2030          bool
+	ConsortiumMembership  bool
+	Software              string
+	LaboratoryAndNOC      bool
 }
 
-func (pc PersonCard) ToDomain(field string) string {
+func (pc PersonCard) ToDomain() string {
 	return fmt.Sprintf(
 		personCardTemplate,
 		pc.Fio,
@@ -91,15 +92,20 @@ func (pc PersonCard) ToDomain(field string) string {
 }
 
 func (oc OrganizationCard) ToDomain() string {
+	consortiumMembership := boolToString(oc.ConsortiumMembership)
+	priority2030 := boolToString(oc.Priority2030)
+	laboratoryAndNOC := boolToString(oc.LaboratoryAndNOC)
 	return fmt.Sprintf(
 		organizationCardTemplate,
-		oc.Organization,
+		oc.Name,
+		oc.StructuralSubdivision,
 		oc.City,
 		oc.PossibleCooperation,
-		oc.ConsortiumMembership,
-		oc.Priority2030,
+		priority2030,
+		consortiumMembership,
 		oc.Software,
-		oc.LaboratoriesAndNOCs)
+		laboratoryAndNOC,
+	)
 }
 
 // TODO подсвечивать найденный текст в карточке
@@ -150,7 +156,7 @@ func FormatCardsAndHighlightOrganization(
 		if highlight {
 			for _, phrase := range searchData {
 				if strings.Contains(strings.ToLower(domainCard), strings.ToLower(phrase)) {
-					domainCard = strings.Replace(domainCard, phrase, "<code>"+phrase+"</code>", -1)
+					domainCard = strings.Replace(domainCard, phrase, "<u>"+phrase+"</u>", -1)
 				}
 			}
 		}
@@ -172,11 +178,18 @@ func FormatCardsAndHighlightPerson(
 		if highlight {
 			for _, phrase := range searchData {
 				if strings.Contains(strings.ToLower(domainCard), strings.ToLower(phrase)) {
-					domainCard = strings.Replace(domainCard, phrase, "<code>"+phrase+"</code>", -1)
+					domainCard = strings.Replace(domainCard, phrase, "<u>"+phrase+"</u>", -1)
 				}
 			}
 		}
 		domainCards = append(domainCards, domainCard)
 	}
 	return domainCards
+}
+
+func boolToString(value bool) string {
+	if value {
+		return "Да"
+	}
+	return "Нет"
 }
