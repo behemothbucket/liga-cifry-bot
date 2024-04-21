@@ -1,21 +1,31 @@
-package main
+package server
 
 import (
+	"log"
 	"net/http"
+	"os"
 	"text/template"
 
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
 
-var indexTmpl = template.Must(template.ParseFiles("index.html"))
+func Index(webappURL string) func(writer http.ResponseWriter, request *http.Request) {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	indexTmpl := template.Must(template.ParseFiles(wd + "/internal/server/resources/index.html"))
 
-func index(webappURL string) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		err := indexTmpl.ExecuteTemplate(writer, "index.html", struct {
-			WebAppURL string
-		}{
-			WebAppURL: webappURL,
-		})
+		err := indexTmpl.ExecuteTemplate(
+			writer,
+			wd+"/internal/server/resources/index.html",
+			struct {
+				WebAppURL string
+			}{
+				WebAppURL: webappURL,
+			},
+		)
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			writer.Write([]byte(err.Error()))
@@ -23,7 +33,7 @@ func index(webappURL string) func(writer http.ResponseWriter, request *http.Requ
 	}
 }
 
-func validate(token string) func(writer http.ResponseWriter, request *http.Request) {
+func Validate(token string) func(writer http.ResponseWriter, request *http.Request) {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		ok, err := ext.ValidateWebAppQuery(request.URL.Query(), token)
 		if err != nil {
