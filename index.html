@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Лига Цифры</title>
+      <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+   </head>
+   <style>
+      * {
+      box-sizing: border-box;
+      font-family: 'Roboto', sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      color: #fff;
+      }
+      body {
+      min-width: 250px;
+      margin: 0;
+      }
+      .control-wrapper-buttons {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      }
+      .downloads-wrapper-button {
+      display: flex;
+      justify-content: flex-start;
+      }
+      .button {
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid rgba(27, 31, 36, 0.15);
+      padding: 0 10px;
+      height: 30px;
+      white-space: nowrap;
+      text-align: center;
+      transition: background-color 0.15s ease-in-out;
+      box-shadow: 0 1px 0 rgba(27, 31, 36, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+      .button:focus-visible {
+      border: 2px solid #0969da;
+      outline: 0;
+      }
+      .button-clear {
+      color: #cf222e;
+      background-color: #f6f8fa;
+      border-color: rgba(27, 31, 36, 0.15);
+      }
+      .button-clear:hover {
+      color: #fff;
+      background-color: #a40e26;
+      border-color: rgba(27, 31, 36, 0.15);
+      box-shadow: inset 0 1px 0 rgba(76, 0, 20, 0.2);
+      }
+      .button-clear:active,
+      .active {
+      background-color: hsla(356, 72%, 44%, 1);
+      border-color: rgba(27, 31, 36, 0.15);
+      box-shadow: inset 0 1px 0 rgba(76, 0, 20, 0.2);
+      }
+      .wrapper .form {
+      background-color: #f6f8fa;
+      padding: 10px 20px;
+      }
+      .wrapper .form .input-field {
+      margin-bottom: 15px;
+      position: relative;
+      }
+      .wrapper .form .input-field label {
+      display: block;
+      margin-bottom: 7px;
+      color: #24292e;
+      }
+      .wrapper .form .input-field .input {
+      width: 100%;
+      background: #fff;
+      border: 1px solid #d1d5da;
+      box-shadow: inset 0 1px 2px rgba(27, 31, 35, .075);
+      border-radius: 6px;
+      color: #24292e;
+      line-height: 20px;
+      min-height: 34px;
+      padding: 6px 8px;
+      transition: border-color ease-in-out .15s, box-shadow ease-in-out .15s;
+      }
+      .wrapper .form .input-field .input:focus {
+      outline: none;
+      border-color: #0969da !important;
+      box-shadow: inset 0 1px 2px rgba(27, 31, 35, .075), 0 0 0 3px rgba(94, 137, 192, 0.3);
+      }
+      .wrapper .form .input-field .input.invalid:focus {
+      outline: none;
+      border-color: #cf222e !important;
+      box-shadow: inset 0 1px 2px rgba(27, 31, 35, .075), 0 0 0 3px rgba(195, 34, 34, 0.3);
+      }
+      .loading {
+      opacity: 0.6;
+      cursor: progress;
+      pointer-events: none;
+      }
+   </style>
+   <body>
+      <div class="wrapper">
+         <div class="form">
+            <div class="input-field">
+               <label for="fio" id="fio-label">ФИО</label>
+               <input type="text" class="input" id="fio" name="fio" autocomplete="off">
+               <span class="icon-info-circled"></span>
+            </div>
+            <div class="input-field">
+               <label for="city" id="city-label">Город</label>
+               <input type="text" class="input" id="city" name="city" autocomplete="off">
+               <span class="icon-info-circled"></span>
+            </div>
+            <div class="input-field">
+               <label for="organization" id="organization-label">Организация</label>
+               <input type="text" class="input" id="organization" name="organization" autocomplete="off">
+               <span class="icon-info-circled"></span>
+            </div>
+            <div class="input-field">
+               <label for="position" id="position-label">Должность</label>
+               <input type="text" class="input" id="position" name="position" autocomplete="off">
+               <span class="icon-info-circled"></span>
+            </div>
+            <div class="input-field">
+               <label for="expertise" id="expertise-label">Экспертные компетенции</label>
+               <input type="text" class="input" id="expertise" name="expertise" autocomplete="off">
+               <span class="icon-info-circled"></span>
+            </div>
+            <div class="input-field">
+               <label for="cooperations" id="cooperations-label">Направления возможного сотрудничества</label>
+               <input type="text" class="input" id="cooperations" name="cooperations" autocomplete="off">
+               <span class="icon-info-circled"></span>
+            </div>
+            <div class="input-field">
+               <label for="contacts" id="contacts-label">Контакты</label>
+               <input type="text" class="input" id="contacts" name="contacts" autocomplete="off">
+            </div>
+            <div class="control-wrapper-buttons">
+               <button class="button button-clear" type="button">
+               Очистить всё
+               </button>
+            </div>
+         </div>
+      </div>
+      <script>
+         const tg = window.Telegram.WebApp;
+         tg.SettingsButton.show()
+         tg.MainButton.show();
+         tg.MainButton.setText("Поиск");
+         tg.MainButton.onClick(() => {
+             tg.MainButton.showProgress();
+             setTimeout(() => {
+                 tg.MainButton.hide();
+                 tg.BackButton.show()
+                 window.open("https://www.innopolis.com/ru", "_self");
+             }, 5000);
+         });
+         tg.BackButton.onClick(() => {
+             window.open("https://www.google.com", "_self");
+         });
+         let buttonClear = document.querySelector(".button-clear");
+         let inputs = document.querySelectorAll("input");
+         let errorIcons = document.querySelectorAll(".icon-info-circled");
+         let labelInputUrl = document.getElementById("url-label");
+         let inputURL = document.getElementById("url");
+
+         buttonClear.addEventListener("click", () => {
+           for (const input of inputs) {
+             input.value = "";
+             input.style.borderColor = "#d1d5da";
+             input.classList.remove("invalid");
+           }
+         });
+
+         inputs.forEach((input) => {
+           input.addEventListener("input", function() {
+             if (this.value) {
+               this.style.borderColor = "#d1d5da";
+               this.classList.remove("invalid");
+             } else {
+               this.style.borderColor = "#cf222e";
+               this.classList.add("invalid");
+             }
+           });
+           input.addEventListener("click", function() {
+             this.nextElementSibling.style.zIndex = "-1";
+           });
+           input.addEventListener("keypress", (event) => {
+             let regex = new RegExp("^[a-zA-Z0-9()]+$");
+             if (!regex.test(event.key)) {
+               event.preventDefault();
+               return false;
+             }
+           });
+         });
+      </script>
+   </body>
+</html>
