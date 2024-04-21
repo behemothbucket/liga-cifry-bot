@@ -298,7 +298,7 @@ func ProcessingMessages(
 	c *Client,
 	msgModel *dialog.Model,
 ) {
-	if update.Message != nil && update.Message.Chat.IsPrivate() {
+	if update.Message != nil {
 		logger.Info(
 			fmt.Sprintf(
 				"[@%s | %v] %s",
