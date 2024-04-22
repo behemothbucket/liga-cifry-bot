@@ -12,7 +12,7 @@ import (
 	"telegram-bot/internal/model/search"
 	"time"
 
-	route "telegram-bot/internal/server"
+	route "telegram-bot/internal/web_app/api"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -143,7 +143,7 @@ func main() {
 
 	// Setup new HTTP server mux to handle different paths.
 	mux := http.NewServeMux()
-	// This serves the hcome page.
+	// This serves the home page.
 	mux.HandleFunc("/", route.Index(webappURL))
 	// This serves our "validation" API, which checks if the input data is valid.
 	mux.HandleFunc("/validate", route.Validate(token))

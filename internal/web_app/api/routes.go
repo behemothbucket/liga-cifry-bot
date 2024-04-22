@@ -1,4 +1,4 @@
-package server
+package api
 
 import (
 	"log"
@@ -14,12 +14,12 @@ func Index(webappURL string) func(writer http.ResponseWriter, request *http.Requ
 	if err != nil {
 		log.Fatal(err)
 	}
-	indexTmpl := template.Must(template.ParseFiles(wd + "/internal/server/resources/index.html"))
+	indexTmpl := template.Must(template.ParseFiles(wd + "internal/server/resources/index.html"))
 
 	return func(writer http.ResponseWriter, request *http.Request) {
 		err := indexTmpl.ExecuteTemplate(
 			writer,
-			wd+"/internal/server/resources/index.html",
+			wd+"internal/server/resources/index.html",
 			struct {
 				WebAppURL string
 			}{
