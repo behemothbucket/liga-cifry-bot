@@ -50,7 +50,7 @@ func doWithTries(fn func() error, attempts int, delay time.Duration) (err error)
 		return nil
 	}
 
-	return
+	return nil
 }
 
 func FormatQuery(q string) string {

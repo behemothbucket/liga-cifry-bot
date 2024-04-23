@@ -1,25 +1,24 @@
-package api
+package ui
 
 import (
-	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"telegram-bot/internal/logger"
 	"text/template"
 
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 )
 
 func Index(webappURL string) func(writer http.ResponseWriter, request *http.Request) {
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	indexTmpl := template.Must(template.ParseFiles(wd + "internal/server/resources/index.html"))
-
+	cwd, _ := os.Getwd()
 	return func(writer http.ResponseWriter, request *http.Request) {
-		err := indexTmpl.ExecuteTemplate(
+		template := template.Must(
+			template.ParseFiles(filepath.Join(cwd, "./internal/web_app/ui/index.html")),
+		)
+		err := template.ExecuteTemplate(
 			writer,
-			wd+"internal/server/resources/index.html",
+			"index.html",
 			struct {
 				WebAppURL string
 			}{
@@ -28,7 +27,10 @@ func Index(webappURL string) func(writer http.ResponseWriter, request *http.Requ
 		)
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
-			writer.Write([]byte(err.Error()))
+			_, err = writer.Write([]byte(err.Error()))
+			if err != nil {
+				logger.Fatal("failed to write templates", "err", err)
+			}
 		}
 	}
 }
