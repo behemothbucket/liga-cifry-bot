@@ -1,0 +1,4 @@
+---
+token: *
+ConnectionStringDB: *
+MaxAttempts: 5
